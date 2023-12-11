@@ -5,8 +5,9 @@ import itertools as iter
 import queue
 from dataclasses import dataclass, field
 from typing import Any
+from astar import astar
+import copy
 
-@dataclass(order=True)
 class SearchNode:
 
     #The list of action sequences of each agent that is represented by this node
@@ -25,12 +26,17 @@ class SearchNode:
     #Initially estimated as the sum of the single agent information gained with each agent starting at the end of these path prefixes
     #Is updated as the search explores and re-evaluates nodes deeper into the graph
     maximum_info_gain = np.inf
+    parent = None
 
-    def __init__(self, actions_taken, min_info=0, max_info=np.inf, current_gain=0):
+    def __repr__(self):
+        return f"{self.action_seqs} - current: {self.current_info_gain} max: {self.maximum_info_gain}"
+
+    def __init__(self, actions_taken, parent, min_info=0, max_info=np.inf, current_gain=0):
         self.action_seqs = actions_taken
         self.minimum_info_gain = min_info
         self.maximum_info_gain = max_info
         self.current_info_gain = current_gain
+        self.parent = parent
 
     def get_children_seqs(self, agent_actions):
         """
@@ -40,10 +46,13 @@ class SearchNode:
         """
 
         extensions = []
+        exts = []
         for ext in iter.product(agent_actions, repeat=len(self.action_seqs)):
-            new_ext = self.action_seqs.copy()
+            new_ext = copy.deepcopy(self.action_seqs)
+            exts.append(ext)
             for i in range(0, len(self.action_seqs)):
-                new_ext[i].append(ext[i])
+                agent_path = new_ext[i]
+                agent_path.append(ext[i])
             extensions.append(new_ext)
 
         return extensions
@@ -67,19 +76,34 @@ class SearchNode:
     def get_path_size(self):
         return len(self.action_seqs[0])
 
+    # defining less than for purposes of heap queue
+    def __lt__(self, other):
+        return self.maximum_info_gain > other.maximum_info_gain
 
+    # defining greater than for purposes of heap queue
+    def __gt__(self, other):
+        return self.maximum_info_gain < other.maximum_info_gain
+
+
+def update_min_costs(node, reward):
+    node.minimum_info_gain = reward
+
+    if node.parent is not None:
+        update_min_costs(node.parent, reward)
 
 def multi_agent_search(agent_actions, map, init_pos, planning_horizon, num_agents, action_model):
 
     open_set = queue.PriorityQueue()
-    open_set = open_set.put((np.inf, [[]*num_agents]))
+    agent_paths = []
+    for _ in range(0, num_agents):
+        agent_paths.append([])
+    open_set.put(SearchNode(agent_paths, None))
     best_paths = None
     best_path_gain = 0
 
     while not open_set.empty():
 
         current = open_set.get()
-
         #If the top of our open set doing worst than our best path so far, then
         #we terminate because that means that even our optimistic estimates are doing worse
         #than our current best path
@@ -87,23 +111,32 @@ def multi_agent_search(agent_actions, map, init_pos, planning_horizon, num_agent
             return best_paths, best_path_gain
 
         #whenever we examine a new action node, we first check to see if we have reached our planning horizon
-        if current.get_path_size() == planning_horizon:
+        if current.get_path_size() >= planning_horizon:
             #if so, then we want to update its parent paths with this newly found multi-agent information gain
-            update_min_costs(current.parents, current.current_info_gain)
+            update_min_costs(current, current.current_info_gain)
 
             #then, update our best path if this is in fact a better path
             if current.current_info_gain > best_path_gain:
                 best_paths = current.action_seqs
                 best_path_gain = current.current_info_gain
+                location_path = current.extract_paths(init_pos, action_model)
+                reward = map.get_reward_from_traj(location_path)
+                print(f"paths: {best_paths} gives {best_path_gain} from going to {location_path} giving {reward}")
         else:
             #If we have not reached a terminus, then we need to add the neighbors and compute their mutual_info_gain, and then add it to the priority queue
             children = current.get_children_seqs(agent_actions)
             for c in children:
-                node = SearchNode(c)
+                node = SearchNode(c, current)
                 location_paths = node.extract_paths(init_pos, action_model)
-
+                is_in_bounds = True
+                for l in location_paths:
+                    end_point = l[-1]
+                    if 0 > end_point[0] or end_point[0] >= map.height or 0 > end_point[1] or end_point[1] >= map.width:
+                        is_in_bounds = False
+                if not is_in_bounds:
+                    continue
                 #the reward thus far, and therefore the minimum reward received from this node because it accounts for the other agents
-                multi_agent_info_gain = calc_multi_agent_gain(location_paths, map)
+                multi_agent_info_gain = map.get_reward_from_traj(location_paths)
 
                 #Now, we can compute the best information gain for each individual agent from this location
                 #this will act as a heuristic of the information gain to come
@@ -112,8 +145,10 @@ def multi_agent_search(agent_actions, map, init_pos, planning_horizon, num_agent
                 single_agent_gains = 0
                 for l in location_paths:
                     time_steps_left = planning_horizon - len(l)
-                    start_from = l[-1]
-                    single_agent_gains += single_agent_optimal_info_gain(start_from, map, time_steps_left)
+                    if time_steps_left > 0:
+                        start_from = l[-1]
+                        path = astar(map, start_from, time_steps_left)
+                        single_agent_gains += map.get_reward_from_traj([path])
 
                 #And then we update the node with this information
                 #NOTE: If we want to exploit the structure of the problem more, one strategy would be, instead of
