@@ -29,3 +29,5 @@ Then we will add measurement noise on top of that when we take a measurement to 
 
 We will also be assuming, for our testing, that we are dealing with continuous measurements. This is what allows us to 
 use the gaussian process assumptions listed prior.  
+
+You can find the working draft at --> https://www.overleaf.com/5562241342qvdbbcvmnvsk#fb90e0 
