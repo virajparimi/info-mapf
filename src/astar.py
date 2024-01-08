@@ -4,8 +4,8 @@
 # Can be found here: https://gist.github.com/ryancollingwood/32446307e976a11a1185a5394d6657bc
 # Modified by Jake Olkin for reward problem version
 
-from warnings import warn
 import heapq
+from warnings import warn
 
 
 class Node:
@@ -28,11 +28,11 @@ class Node:
     def __repr__(self):
         return f"{self.position} - g: {self.g} h: {self.h} f: {self.f}"
 
-    # defining less than for purposes of heap queue
+    # Defining less than for purposes of heap queue
     def __lt__(self, other):
         return self.f < other.f
 
-    # defining greater than for purposes of heap queue
+    # Defining greater than for purposes of heap queue
     def __gt__(self, other):
         return self.f > other.f
 
@@ -46,60 +46,48 @@ def return_path(current_node):
     return path[::-1]  # Return reversed path
 
 
-def astar(map, start, horizons, allow_diagonal_movement=False, max_iterations = 500):
+def astar(map, start, horizon, allow_diagonal_movement=False, max_iterations = 500):
     """
     Returns a list of tuples as a path from the given start to the given end in the given maze
-    :param maze:
-    :param start:
-    :param end:
-    :return:
+    :param map
+    :param start
+    :param end
+    :return
     """
 
     # Create start and end node
     start_node = Node(0, None, start)
     start_node.g = start_node.h = start_node.f = 0
-    #end_node = Node(None, end)
-    #end_node.g = end_node.h = end_node.f = 0
+
+    # We dont have end nodes so we do not need to create a node for that
 
     # Initialize both open and closed list
     open_list = []
     closed_list = []
 
-    # Heapify the open_list and Add the start node
+    # Heapify the open_list and add the start node
     heapq.heapify(open_list)
     heapq.heappush(open_list, start_node)
 
-    # Adding a stop condition
-    outer_iterations = 0
-
-    # what squares do we search
+    # Define our successors given a node
     adjacent_squares = ((0, -1), (0, 1), (-1, 0), (1, 0),)
     if allow_diagonal_movement:
         adjacent_squares = ((0, -1), (0, 1), (-1, 0), (1, 0), (-1, -1), (-1, 1), (1, -1), (1, 1),)
 
     # Loop until you find the end
     while len(open_list) > 0:
-        outer_iterations += 1
-
-        if outer_iterations > max_iterations:
-            # if we hit this point return the path such as it is
-            # it will not contain the destination
-            warn("giving up on pathfinding too many iterations")
-            return return_path(current_node)
-
-            # Get the current node
+        # Get the current node
         current_node = heapq.heappop(open_list)
         closed_list.append(current_node)
 
-        # Found the goal
         time = current_node.t
-        print(f"t: {time} h: {horizons}")
-        if time == horizons:
+        print(f"t: {time} h: {horizon}")
+        if time == horizon:
+            # If we hit our planning horizon then we return the path that we found till now
             return return_path(current_node)
 
         # Generate children
         children = []
-
         for new_position in adjacent_squares:  # Adjacent squares
 
             # Get node position
@@ -111,23 +99,22 @@ def astar(map, start, horizons, allow_diagonal_movement=False, max_iterations = 
                 continue
 
             # Create new node
-            new_node = Node(current_node.t +1, current_node, node_position)
-
-            # Append
+            new_node = Node(current_node.t + 1, current_node, node_position)
             children.append(new_node)
 
         # Loop through children
         for child in children:
+
             # Child is on the closed list
             if len([closed_child for closed_child in closed_list if (closed_child == child and closed_child.t == child.t)]) > 0:
                 continue
 
             # Create the f, g, and h values
-            child.g = - map.get_reward_from_traj([return_path(current_node)])
+            child.g = -1.0 * map.get_reward_from_traj([return_path(current_node)])
             post_traversal = map.get_grid_after_traj([return_path(current_node)])
-            max_range = horizons - child.t
+            max_range = horizon - child.t
             best_rewards = []
-            for i in range(0,map.height):
+            for i in range(0, map.height):
                 for j in range(0, map.width):
                     if abs(i - child.position[0]) + abs(j - child.position[1]) <= max_range:
                         best_rewards.append(post_traversal[i,j])
@@ -176,7 +163,7 @@ def example(print_maze=True):
 
     path = astar(maze, start, end)
 
-    if print_maze:
+    if print_maze and path is not None:
         for step in path:
             maze[step[0]][step[1]] = 2
 
