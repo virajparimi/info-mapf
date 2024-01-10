@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.special import erf
 
 
 class MarkovDecisionProcess(object):
@@ -59,3 +60,24 @@ class MarkovDecisionProcess(object):
             @ covariance_observations_location
             + np.eye(len(location_ids)) * map.measurement_noise
         )
+        return mean, covariance
+
+    # Should return p(\hat{x_i} | y^{0:t}) - Equation 4.20
+    def phenomenon_probability_function(self, location_ids, map):
+        phenomenon_probabilities = np.zeros(len(location_ids))
+        means, covariances = self.compute_conditional_measurement(location_ids, map)
+        erf_quantity_numerator = np.ones(means.shape[0]) * map.params.u_tilde - means
+        erf_quantity_denominator = np.diag(np.sqrt(2 * covariances))
+
+        for idx, location_id in enumerate(location_ids):
+            high_probability_factor = (map.params.P_1 / 2) * (
+                1.0 - erf(erf_quantity_numerator[idx] / erf_quantity_denominator[idx])
+            )
+            low_probability_factor = (map.params.P_2 / 2) * (
+                1.0 + erf(erf_quantity_numerator[idx] / erf_quantity_denominator[idx])
+            )
+            phenomenon_probabilities[idx] = (
+                high_probability_factor + low_probability_factor
+            )
+
+        return phenomenon_probabilities

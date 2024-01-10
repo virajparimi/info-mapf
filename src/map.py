@@ -8,6 +8,15 @@ class Observation:
     measurement: float  # y
 
 
+@dataclass
+class Parameters:
+    theta_1: float  # variance of isolated feature
+    theta_2: float  # characteristic length for covariance decay
+    u_tilde: float  # threshold for conditional measurement mean
+    P_1: float  # probability weight when conditional measurement exceeds threshold
+    P_2: float  # probability weight when conditional measurement is below threshold
+
+
 class Map(object):
     def __init__(self, maze, means=None, locations=None):
         self.map = (
@@ -37,8 +46,9 @@ class Map(object):
         for location_id, mean in zip(self.locations, self.means):
             self.location_means[location_id] = mean
 
-        self.theta_1 = 0.4  # variance of isolated feature
-        self.theta_2 = 0.01  # characteristic length for covariance decay
+        self.params = Parameters(
+            theta_1=0.4, theta_2=0.01, u_tilde=1.4, P_1=0.98, P_2=0.002
+        )
 
         self.measurement_noise = 0.2
 
@@ -94,7 +104,9 @@ class Map(object):
         location_a = self.get_coordinate(location_id_a)
         location_b = self.get_coordinate(location_id_b)
         distance = float(np.linalg.norm(location_a - location_b))
-        covariance = self.theta_1 * np.exp(-distance / (self.theta_2**2))
+        covariance = self.params.theta_1 * np.exp(
+            -distance / (self.params.theta_2**2)
+        )
         return covariance
 
     def kernel_function(self, location_ids_a, location_ids_b):
