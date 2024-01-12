@@ -1,40 +1,72 @@
 import numpy as np
+from warnings import warn
 from scipy.special import erf
+from typing import List, Tuple
+from numpy.typing import NDArray
+from map import Map, Observation
+from utils import positive_definite_matrix
 
 
 class MarkovDecisionProcess(object):
-    def __init__(self, start, map):
-        observation = map.get_observation(
-            start
-        )  # continuous observation for now ->  should be a tuple of (location, measurement)
-        self.observations = [observation]
-        self.init_state = [
-            self.observations,
-        ]
+    def __init__(self, start: int, map: Map):
+        self.states = []
+        self.observations = []
         self.actions = ["Left", "Right", "Up", "Down"]
 
-    # Should return p(y_i | y^{0:t})
-    def compute_conditional_measurement(self, location_ids, map):
-        # m(l) and v(l, l)
-        mean_of_location = map.mean_function(location_ids)
-        covariance_of_location = map.kernel_function(location_ids, location_ids)
+        self.update(start, map)
+
+    def update(self, location: int, map: Map):
+        """
+        Updates the state that the agent is in
+        :param location: Location that the agent is in now after executing an action
+        :param map: Map object to query the underlying GP
+        """
+        observation = map.get_observation(location)
+        self.observations.append(observation)
+
+        feature_probabilities = np.zeros(map.map_size)
+        feature_means, feature_covariances = self.measurement_function(
+            [location_id for location_id in range(map.map_size)], map, self.observations
+        )
+        feature_probabilities = np.random.multivariate_normal(
+            feature_means, feature_covariances
+        )
+
+        phenomenon_probabilities = self.phenomenon_probability_function(
+            [location_id for location_id in range(map.map_size)], map, self.observations
+        )
+
+        self.states.append(
+            [self.observations, feature_probabilities, phenomenon_probabilities]
+        )
+
+    def measurement_function(
+        self, location_ids: List[int], map: Map, observations: List[Observation]
+    ) -> Tuple[NDArray[np.float64], NDArray[np.float64]]:
+        """
+        Returns the conditional measurement probability's p(u^{t+1:t+h} | y^{0:t}) mean and covariance - Equation 4.18
+        :param location_ids: List of future locations to compute the conditional measurement over i.e L^{t+1|t+h}
+        :param map: Map object to query the underlying GP
+        :param observations: List of observations y^{0:t}
+        """
+        # m(l^{t+1:t+h}) and v(l^{t+1:t_h}, l^{t+1:t+h})
+        mean_of_futures = map.mean_function(location_ids)
+        covariance_of_futures = map.kernel_function(location_ids, location_ids)
 
         # l^{0:t}
-        observation_locations = [
-            observation.location for observation in self.observations
-        ]
+        observation_locations = [observation.location for observation in observations]
         # y^{0:t}
         observation_measurements = [
-            observation.measurement for observation in self.observations
+            observation.measurement for observation in observations
         ]
 
-        # v(l, l^{0:t})
-        covariance_location_observations = map.kernel_function(
+        # v(l^{t+1:t+h}, l^{0:t})
+        covariance_futures_observations = map.kernel_function(
             location_ids, observation_locations
         )
 
-        # v(l^{0:t}, l)
-        covariance_observations_location = map.kernel_function(
+        # v(l^{0:t}, l^{t+1:t+h})
+        covariance_observations_futures = map.kernel_function(
             observation_locations, location_ids
         )
 
@@ -43,37 +75,66 @@ class MarkovDecisionProcess(object):
             observation_locations, observation_locations
         )
 
-        mean = mean_of_location + covariance_location_observations @ np.linalg.inv(
+        mean = mean_of_futures + covariance_futures_observations @ np.linalg.inv(
             covariance_observations
-            + np.eye(len(self.observations) * map.measurement_noise)
+            + np.eye(len(observations)) * np.power(map.measurement_noise, 2)
         ) @ (
             np.array(observation_measurements)
             - map.mean_function(observation_locations)
         )
         covariance = (
-            covariance_of_location
-            - covariance_location_observations
+            covariance_of_futures
+            - covariance_futures_observations
             @ np.linalg.inv(
                 covariance_observations
-                + np.eye(len(self.observations)) * map.measurement_noise
+                + np.eye(len(observations)) * np.power(map.measurement_noise, 2)
             )
-            @ covariance_observations_location
-            + np.eye(len(location_ids)) * map.measurement_noise
+            @ covariance_observations_futures
         )
+
+        if not positive_definite_matrix(covariance):
+            warn("Covariance matrix is not positive definite!")
+
         return mean, covariance
 
-    # Should return p(\hat{x_i} | y^{0:t}) - Equation 4.20
-    def phenomenon_probability_function(self, location_ids, map):
-        phenomenon_probabilities = np.zeros(len(location_ids))
-        means, covariances = self.compute_conditional_measurement(location_ids, map)
-        erf_quantity_numerator = np.ones(means.shape[0]) * map.params.u_tilde - means
-        erf_quantity_denominator = np.diag(np.sqrt(2 * covariances))
+    def noisy_measurement_function(
+        self, location_ids: List[int], map: Map, observations: List[Observation]
+    ) -> Tuple[NDArray[np.float64], NDArray[np.float64]]:
+        """
+        Returns the conditional measurement probability p(y^{t+1:t+h} | y^{0:t})
+        :param location_ids: List of future locations to compute the conditional measurement over i.e L^{t+1|t+h}
+        :param map: Map object to query the underlying GP
+        :param observations: List of observations y^{0:t}
+        """
+        mean, covariance = self.measurement_function(location_ids, map, observations)
+        covariance += np.eye(len(location_ids)) * np.power(map.measurement_noise, 2)
+        return mean, covariance
 
-        for idx, location_id in enumerate(location_ids):
-            high_probability_factor = (map.params.P_1 / 2) * (
+    def phenomenon_probability_function(
+        self, location_ids: List[int], map: Map, observations: List[Observation]
+    ):
+        """
+        Returns the phenomenon probability of existing at a set of locations (generally the whole grid) given a set of
+        observations i.e p(x_i = 1 | y^{0:t}) - Equation 4.20
+        :param location_ids: List of locations to compute the phenomenon probability over
+        :param map: Map object to query the underlying GP
+        :param observations: List of observations y^{0:t}
+        """
+        phenomenon_probabilities = np.zeros(len(location_ids))
+        means, covariances = self.noisy_measurement_function(
+            location_ids, map, observations
+        )
+
+        erf_quantity_numerator = (np.ones(means.shape[0]) * map.params.u_tilde) - means
+        erf_quantity_denominator = np.diag(
+            np.sqrt(2 * covariances)
+        )  # TODO: Should we be using diagonal entries only?
+
+        for idx in range(len(location_ids)):
+            high_probability_factor = (np.divide(map.params.P_1, 2)) * (
                 1.0 - erf(erf_quantity_numerator[idx] / erf_quantity_denominator[idx])
             )
-            low_probability_factor = (map.params.P_2 / 2) * (
+            low_probability_factor = (np.divide(map.params.P_2, 2.0)) * (
                 1.0 + erf(erf_quantity_numerator[idx] / erf_quantity_denominator[idx])
             )
             phenomenon_probabilities[idx] = (

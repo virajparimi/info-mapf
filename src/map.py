@@ -1,44 +1,54 @@
 import numpy as np
+from typing import Union, List
+from numpy.typing import NDArray
 from dataclasses import dataclass
 
 
 @dataclass
 class Observation:
-    location: float  # l
-    measurement: float  # y
+    location: int  # l
+    measurement: np.float64  # y
+
+
+@dataclass
+class Action:
+    action_type: str
+    location: int
 
 
 @dataclass
 class Parameters:
-    theta_1: float  # variance of isolated feature
-    theta_2: float  # characteristic length for covariance decay
-    u_tilde: float  # threshold for conditional measurement mean
-    P_1: float  # probability weight when conditional measurement exceeds threshold
-    P_2: float  # probability weight when conditional measurement is below threshold
+    theta_1: np.float64  # variance of isolated feature
+    theta_2: np.float64  # characteristic length for covariance decay
+    u_tilde: np.float64  # threshold for conditional measurement mean
+    P_1: np.float64  # probability weight when conditional measurement exceeds threshold
+    P_2: np.float64  # probability weight when conditional measurement is below threshold
+    J: np.int64
 
 
 class Map(object):
-    def __init__(self, maze, means=None, locations=None):
-        self.map = (
-            maze  # Should be a boolean array indicating where the agents/obstacles are
-        )
-        self.num_of_rows, self.num_of_cols, self.map_size = (
-            maze.shape[0],
-            maze.shape[1],
-            maze.shape[0] * maze.shape[1],
-        )
+    def __init__(
+        self,
+        maze: NDArray[np.int64],
+        means: Union[List, None] = None,
+        locations: Union[List, None] = None,
+    ):
+        self.map = maze
+        self.num_of_rows = maze.shape[0]
+        self.num_of_cols = maze.shape[1]
+        self.map_size = self.num_of_rows * self.num_of_cols
 
         if means is None:
-            self.means: list = [1]
+            self.means = [1]
         else:
-            self.means: list = means
+            self.means = means
 
         if locations is None:
-            self.locations: list = [
+            self.locations = [
                 self.linearize_coordinate(self.num_of_rows // 2, self.num_of_cols // 2)
             ]
         else:
-            self.locations: list = []
+            self.locations = []
             for loc in locations:
                 self.locations.append(self.linearize_coordinate(loc[0], loc[1]))
 
@@ -47,18 +57,23 @@ class Map(object):
             self.location_means[location_id] = mean
 
         self.params = Parameters(
-            theta_1=0.4, theta_2=0.01, u_tilde=1.4, P_1=0.98, P_2=0.002
+            theta_1=np.float64(0.4),
+            theta_2=np.float64(0.01),
+            u_tilde=np.float64(1.4),
+            P_1=np.float64(0.98),
+            P_2=np.float64(0.002),
+            J=np.int64(5),
         )
 
         self.measurement_noise = 0.2
 
-    def get_row_coordinate(self, location_id):
+    def get_row_coordinate(self, location_id: int) -> int:
         return location_id // self.num_of_cols
 
-    def get_column_coordinate(self, location_id):
+    def get_column_coordinate(self, location_id: int) -> int:
         return location_id % self.num_of_cols
 
-    def get_coordinate(self, location_id):
+    def get_coordinate(self, location_id: int) -> NDArray[np.int64]:
         return np.array(
             [
                 self.get_row_coordinate(location_id),
@@ -69,47 +84,49 @@ class Map(object):
     def linearize_coordinate(self, row: int, column: int) -> int:
         return self.num_of_cols * row + column
 
-    def get_manhattan_distance(self, location_id_a, location_id_b):
+    def get_manhattan_distance(self, location_id_a: int, location_id_b: int) -> int:
         location_a = self.get_coordinate(location_id_a)
         location_b = self.get_coordinate(location_id_b)
-        return abs(location_a[0] - location_b[0]) + abs(location_a[1] - location_b[1])
+        return np.sum(np.abs(location_a - location_b))
 
-    def valid_move(self, current, next):
+    def valid_move(self, current: int, next: int) -> bool:
         if next < 0 or next >= self.map_size or self.map[next]:
             return False
         return self.get_manhattan_distance(current, next) < 2
 
-    def get_neighbors(self, current):
+    def get_neighbors(self, current: int) -> List[Action]:
         neighbors = []
         candidates = [
-            current + 1,
-            current - 1,
-            current + self.num_of_cols,
-            current - self.num_of_cols,
+            Action("Right", current + 1),
+            Action("Left", current - 1),
+            Action("Down", current + self.num_of_cols),
+            Action("Up", current - self.num_of_cols),
         ]
         for next in candidates:
-            if self.valid_move(current, next):
+            if self.valid_move(current, next.location):
                 neighbors.append(next)
         return neighbors
 
     # Defines the mean function "m" for the Gaussian Process
-    def mean_function(self, location_ids):
+    def mean_function(self, location_ids: List[int]) -> NDArray[np.float64]:
         means = np.zeros(len(location_ids))
         for idx, location_id in enumerate(location_ids):
             means[idx] = self.location_means[location_id]
         return means
 
-    def covariance_function(self, location_id_a, location_id_b):
-        assert len(location_id_a) == 1
+    # Defines the exponential covariance function between two locations for the Gaussian Process
+    def covariance_function(self, location_id_a: int, location_id_b: int) -> np.float64:
         location_a = self.get_coordinate(location_id_a)
         location_b = self.get_coordinate(location_id_b)
-        distance = float(np.linalg.norm(location_a - location_b))
+        distance = np.float64(np.linalg.norm(location_a - location_b))
         covariance = self.params.theta_1 * np.exp(
-            -distance / (self.params.theta_2**2)
+            -distance / np.power(self.params.theta_2, 2)
         )
         return covariance
 
-    def kernel_function(self, location_ids_a, location_ids_b):
+    def kernel_function(
+        self, location_ids_a: List[int], location_ids_b: List[int]
+    ) -> NDArray[np.float64]:
         kernel_matrix = np.zeros((len(location_ids_a), len(location_ids_b)))
         for idx_a, location_id_a in enumerate(location_ids_a):
             for idx_b, location_id_b in enumerate(location_ids_b):
@@ -118,10 +135,11 @@ class Map(object):
                 )
         return kernel_matrix
 
-    def get_feature_prior(self, location):
-        # p(u_i)
-        return self.feature_priors[location[0], location[1]]
-
-    def get_measurement_noise_prior(self, location):
-        # p(y_i | u_i)
-        return self.measurement_noise_priors[location[0], location[1]]
+    def get_observation(self, location_id: int) -> Observation:
+        mean = self.mean_function([location_id])[0]
+        covariance = self.covariance_function(location_id, location_id)
+        sample_measurement = np.random.normal(loc=mean, scale=covariance)
+        return Observation(
+            location=location_id,
+            measurement=np.float64(sample_measurement),
+        )
