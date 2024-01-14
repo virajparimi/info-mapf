@@ -1,8 +1,8 @@
 import numpy as np
-from typing import List
-from map import Map, Observation
+from typing import List, Tuple
 from scipy.special import kl_div
 from mdp import MarkovDecisionProcess
+from map import Map, Observation, Action
 
 # Default agent class with 4 cardinal deterministic actions
 
@@ -23,14 +23,16 @@ class Agent(object):
         self.mdp_handle = MarkovDecisionProcess(start_location, self.map)
 
     def adaptive_search(self):
+        """
+        Performs the regular Vulcan adaptive search algorithm for a single agent assuming they are
+        not in communication range of other agents
+        """
         while self.timer < self.mission_duration:
             horizon = min(self.planning_horizon, self.mission_duration - self.timer)
-            best_action = self.extract_action(
+            _, best_action = self.extract_action(
                 self.timer, self.timer + horizon, self.mdp_handle.observations
             )
-            self.current_location = self.execute_action(
-                best_action
-            )  # TODO: This function should update the map
+            self.current_location = self.execute_action(best_action)
             self.mdp_handle.update(self.current_location, self.map)
             self.timer += 1
 
@@ -39,7 +41,7 @@ class Agent(object):
         current_timestep: int,
         planning_horizon: int,
         observations: List[Observation],
-    ) -> str:
+    ) -> Tuple[np.float64, Action]:
         """
         Extracts the best action to execute at the current timestep
         :param current_timestep: Current timestep k
@@ -48,9 +50,10 @@ class Agent(object):
         """
 
         abscissae, weights = np.polynomial.hermite.hermgauss(self.map.params.J)
-        for next in self.map.get_neighbors(self.current_location):
-            next_action, next_location = next.action_type, next.location
-            action_reward = 0
+        valid_neighbors = self.map.get_neighbors(self.current_location)
+        action_rewards = np.zeros(len(valid_neighbors))
+        for idx, next in enumerate(valid_neighbors):
+            _, next_location = next.action_type, next.location
             (
                 future_measurement_mean,
                 future_measurement_covariance,
@@ -97,4 +100,26 @@ class Agent(object):
                         current_phenomenon_probabilities,
                     )
                 )
-                action_reward += (weights[index] / np.sqrt(np.pi)) * kl_divergence
+
+                action_rewards[idx] += (weights[index] / np.sqrt(np.pi)) * kl_divergence
+
+                if current_timestep + 1 < planning_horizon:
+                    next_action_reward, _ = self.extract_action(
+                        current_timestep + 1, planning_horizon, future_observations
+                    )
+                    action_rewards[idx] += (
+                        weights[index] / np.sqrt(np.pi)
+                    ) * next_action_reward
+
+        best_reward = np.max(action_rewards)
+        best_action = valid_neighbors[np.argmax(action_rewards)]
+        return best_reward, best_action
+
+    def execute_action(self, action: Action) -> int:
+        """
+        Executes an action returned by the extract_action function where it updates the agent's location
+        :param action: Action to execute
+        """
+        _, action_location = action.action_type, action.location
+        self.map.update_agent_location(self.current_location, action_location)
+        return action_location
