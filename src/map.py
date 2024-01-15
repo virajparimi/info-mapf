@@ -23,7 +23,8 @@ class Parameters:
     u_tilde: np.float64  # threshold for conditional measurement mean
     P_1: np.float64  # probability weight when conditional measurement exceeds threshold
     P_2: np.float64  # probability weight when conditional measurement is below threshold
-    J: np.int64
+    J: np.int64  # Order of the Gauss-Hermite quadrature
+    distance_simplification: bool  # Whether to use the distance simplification
 
 
 class Map(object):
@@ -32,6 +33,7 @@ class Map(object):
         maze: NDArray[np.bool8],
         means: Union[List, None] = None,
         locations: Union[List, None] = None,
+        params: Union[Parameters, None] = None,
     ):
         self.map = maze
         self.num_of_rows = maze.shape[0]
@@ -68,14 +70,18 @@ class Map(object):
 
         self.grid = self.grid / np.max(self.grid)
 
-        self.params = Parameters(
-            theta_1=np.float64(0.4),
-            theta_2=np.float64(0.01),
-            u_tilde=np.float64(1.4),
-            P_1=np.float64(0.98),
-            P_2=np.float64(0.002),
-            J=np.int64(5),
-        )
+        if params is None:
+            self.params = Parameters(
+                theta_1=np.float64(0.4),
+                theta_2=np.float64(0.01),
+                u_tilde=np.float64(1.4),
+                P_1=np.float64(0.98),
+                P_2=np.float64(0.002),
+                J=np.int64(5),
+                distance_simplification=True,
+            )
+        else:
+            self.params = params
 
         self.measurement_noise = 0.2
 

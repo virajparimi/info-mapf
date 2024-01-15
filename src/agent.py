@@ -2,6 +2,7 @@ import numpy as np
 from typing import List, Tuple
 from scipy.special import kl_div
 from mdp import MarkovDecisionProcess
+from utils import get_nearest_locations
 from map import Map, Observation, Action
 
 # Default agent class with 4 cardinal deterministic actions
@@ -76,26 +77,41 @@ class Agent(object):
                 )
                 future_noisy_measurement = future_noisy_measurement[0]
 
-                # p(x_i | y_{0:k})
-                current_phenomenon_probabilities = (
-                    self.mdp_handle.phenomenon_probability_function(
-                        [location_id for location_id in range(self.map.map_size)],
-                        self.map,
-                        observations,
-                        unobserved_phenomenon=False,
-                    )
-                )
-
                 # y_{0:k+1}
                 future_observations = observations.copy()
                 future_observations.append(
                     Observation(next_location, future_noisy_measurement)
                 )
 
+                if self.map.params.distance_simplification:
+                    locations_to_consider = get_nearest_locations(
+                        [
+                            observation.location for observation in future_observations
+                        ],  # Using the distance simplification
+                        self.map,
+                        np.multiply(
+                            self.map.params.theta_1, 5.0
+                        ),  # TODO: Should we be using theta_1 or theta_2 here?
+                    )
+                else:
+                    locations_to_consider = [
+                        location_id for location_id in range(self.map.map_size)
+                    ]
+
+                # p(x_i | y_{0:k})
+                current_phenomenon_probabilities = (
+                    self.mdp_handle.phenomenon_probability_function(
+                        locations_to_consider,
+                        self.map,
+                        observations,
+                        unobserved_phenomenon=False,
+                    )
+                )
+
                 # p(\hat{x_i} | y_{0:k+1})
                 future_phenomenon_probabilities = (
                     self.mdp_handle.phenomenon_probability_function(
-                        [location_id for location_id in range(self.map.map_size)],
+                        locations_to_consider,
                         self.map,
                         future_observations,
                     )

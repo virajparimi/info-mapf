@@ -154,7 +154,7 @@ class MarkovDecisionProcess(object):
             )
 
         if unobserved_phenomenon:
-            last_observation_location = observations[-1].location
-            phenomenon_probabilities[last_observation_location] = 0.0
+            # last_observation_location = observations[-1].location
+            phenomenon_probabilities[-1] = 0.0
 
         return phenomenon_probabilities
