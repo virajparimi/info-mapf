@@ -10,11 +10,13 @@ from map import Map, Observation, Action
 class Agent(object):
     def __init__(
         self,
+        id: int,
         start_location: int,
         map: Map,
         mission_duration: int = 5,
         planning_horizon: int = 2,
     ):
+        self.id = id
         self.timer = 0
         self.map = map
         self.current_location = start_location
@@ -28,6 +30,7 @@ class Agent(object):
         not in communication range of other agents
         """
         while self.timer < self.mission_duration:
+            print("Time = ", self.timer)
             horizon = min(self.planning_horizon, self.mission_duration - self.timer)
             _, best_action = self.extract_action(
                 self.timer, self.timer + horizon, self.mdp_handle.observations
@@ -68,6 +71,7 @@ class Agent(object):
                     )  # TODO: Do we need extract the diagnoal entries here?
                     + future_measurement_mean
                 )
+                future_noisy_measurement = future_noisy_measurement[0]
 
                 # p(x_i | y_{0:k})
                 current_phenomenon_probabilities = (

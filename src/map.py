@@ -29,7 +29,7 @@ class Parameters:
 class Map(object):
     def __init__(
         self,
-        maze: NDArray[np.int64],
+        maze: NDArray[np.bool8],
         means: Union[List, None] = None,
         locations: Union[List, None] = None,
     ):
@@ -119,7 +119,13 @@ class Map(object):
         :param current: Current linearized location of an agent
         :param next: Next linearized location of an agent
         """
-        if next < 0 or next >= self.map_size or self.map[next]:
+
+        next_location = self.get_coordinate(next)
+        if (
+            next < 0
+            or next >= self.map_size
+            or not self.map[next_location[0], next_location[1]]
+        ):
             return False
         return self.get_manhattan_distance(current, next) < 2
 
@@ -147,9 +153,12 @@ class Map(object):
         :param current: Current location of an agent
         :param next: Next location of an agent
         """
-        assert self.map[next]
-        self.map[current] = True
-        self.map[next] = False
+
+        next_location = self.get_coordinate(next)
+        assert self.map[next_location[0], next_location[1]]
+        current_location = self.get_coordinate(current)
+        self.map[current_location[0], current_location[1]] = True
+        self.map[next_location[0], next_location[1]] = False
 
     def mean_function(self, location_ids: List[int]) -> NDArray[np.float64]:
         """

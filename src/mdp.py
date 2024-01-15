@@ -21,6 +21,7 @@ class MarkovDecisionProcess(object):
         :param location: Location that the agent is in now after executing an action
         :param map: Map object to query the underlying GP
         """
+
         observation = map.get_observation(location)
         self.observations.append(observation)
 
