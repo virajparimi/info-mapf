@@ -52,9 +52,21 @@ class Map(object):
             for loc in locations:
                 self.locations.append(self.linearize_coordinate(loc[0], loc[1]))
 
-        self.location_means = np.zeros(self.map_size)
-        for location_id, mean in zip(self.locations, self.means):
-            self.location_means[location_id] = mean
+        self.grid = np.zeros(self.map.shape)
+        for location_means in range(0, len(self.means)):
+            linearized_location = self.locations[location_means]
+            location = self.get_coordinate(linearized_location)
+            sample_locations = np.random.multivariate_normal(
+                location, np.eye(2), size=(1000)
+            )
+            for sample in sample_locations:
+                sample_x, sample_y = sample
+                row = int(np.round(sample_x))
+                column = int(np.round(sample_y))
+                if 0 <= row < maze.shape[0] and 0 <= column < maze.shape[1]:
+                    self.grid[row, column] += 1.0 * self.means[location_means]
+
+        self.grid = self.grid / np.max(self.grid)
 
         self.params = Parameters(
             theta_1=np.float64(0.4),
@@ -88,8 +100,8 @@ class Map(object):
         """
         return np.array(
             [
-                self.get_row_coordinate(location_id),
                 self.get_column_coordinate(location_id),
+                self.get_row_coordinate(location_id),
             ]
         )
 
@@ -167,7 +179,8 @@ class Map(object):
         """
         means = np.zeros(len(location_ids))
         for idx, location_id in enumerate(location_ids):
-            means[idx] = self.location_means[location_id]
+            location = self.get_coordinate(location_id)
+            means[idx] = self.grid[location[0], location[1]]
         return means
 
     # Defines the exponential covariance function between two locations for the Gaussian Process

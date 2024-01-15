@@ -33,8 +33,17 @@ class MarkovDecisionProcess(object):
             feature_means, feature_covariances
         )
 
+        if len(self.states) == 0:
+            # We should not use unobserved phenonmenon probabilities for the first state
+            unobserved_phenomenon = False
+        else:
+            unobserved_phenomenon = True
+
         phenomenon_probabilities = self.phenomenon_probability_function(
-            [location_id for location_id in range(map.map_size)], map, self.observations
+            [location_id for location_id in range(map.map_size)],
+            map,
+            self.observations,
+            unobserved_phenomenon,
         )
 
         self.states.append(

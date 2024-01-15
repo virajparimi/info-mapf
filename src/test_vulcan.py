@@ -12,7 +12,7 @@ def generate_maze(
     agent_locations: Union[List[List[int]], None] = None,
     gp_means: Union[List[int], None] = None,
     gp_locations: Union[List[List[int]], None] = None,
-) -> Tuple[NDArray[np.bool8], NDArray[np.float64], Map]:
+) -> Tuple[NDArray[np.bool8], Map]:
     """
     Generates a random maze of size rows x columns
     :param rows: Number of rows
@@ -22,11 +22,11 @@ def generate_maze(
     maze = np.ones((rows, columns), dtype=np.bool8)
 
     if agent_locations is None:
-        center = [rows // 2, columns // 2]
+        center = [0, 0]
         agent_locations = [center]
 
     for agent_location in agent_locations:
-        maze[agent_location] = False
+        maze[agent_location[0], agent_location[1]] = False
 
     if gp_means is None:
         gp_means = [1]
@@ -34,25 +34,11 @@ def generate_maze(
         gp_locations = [[rows // 2, columns // 2]]
 
     map = Map(maze, means=gp_means, locations=gp_locations)
-
-    grid = np.zeros(maze.shape)
-    for location_means in range(0, len(map.means)):
-        linearized_location = map.locations[location_means]
-        location = map.get_coordinate(linearized_location)
-        sample_locations = np.random.multivariate_normal(
-            location, np.eye(2), size=(1000)
-        )
-        for sample in sample_locations:
-            sample_x, sample_y = sample
-            row = int(np.round(sample_x))
-            column = int(np.round(sample_y))
-            if 0 <= row < maze.shape[0] and 0 <= column < maze.shape[1]:
-                grid[row, column] += 1.0 * map.means[location_means]
-    return maze, grid, map
+    return maze, map
 
 
 if __name__ == "__main__":
-    maze, grid, map = generate_maze(5, 5)
+    maze, map = generate_maze(5, 5)
     single_agent = Agent(id=1, start_location=0, map=map)
 
     single_agent.adaptive_search()
@@ -63,5 +49,5 @@ if __name__ == "__main__":
         path.append(map.get_coordinate(location))
 
     plt.plot([x[0] for x in path], [x[1] for x in path], "r-")
-    plt.imshow(grid)
+    plt.imshow(map.grid)
     plt.show()

@@ -52,10 +52,13 @@ class Agent(object):
         :param observations: List of observations y_{0:k}
         """
 
+        print("Extracting action for timestep = ", current_timestep)
+
         abscissae, weights = np.polynomial.hermite.hermgauss(self.map.params.J)
         valid_neighbors = self.map.get_neighbors(self.current_location)
         action_rewards = np.zeros(len(valid_neighbors))
         for idx, next in enumerate(valid_neighbors):
+            print("Checking valid neighbor ", next.action_type)
             _, next_location = next.action_type, next.location
             (
                 future_measurement_mean,
@@ -121,6 +124,7 @@ class Agent(object):
                 action_rewards[idx] += (weights[index] / np.sqrt(np.pi)) * kl_divergence
 
                 if current_timestep + 1 < planning_horizon:
+                    print("Calling recursive extract_function for absicca = ", index)
                     next_action_reward, _ = self.extract_action(
                         current_timestep + 1, planning_horizon, future_observations
                     )
@@ -130,6 +134,13 @@ class Agent(object):
 
         best_reward = np.max(action_rewards)
         best_action = valid_neighbors[np.argmax(action_rewards)]
+
+        print(
+            "Best action for current timestep "
+            + str(current_timestep)
+            + " is "
+            + best_action.action_type
+        )
         return best_reward, best_action
 
     def execute_action(self, action: Action) -> int:
