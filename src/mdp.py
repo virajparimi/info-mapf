@@ -111,7 +111,11 @@ class MarkovDecisionProcess(object):
         return mean, covariance
 
     def phenomenon_probability_function(
-        self, location_ids: List[int], map: Map, observations: List[Observation]
+        self,
+        location_ids: List[int],
+        map: Map,
+        observations: List[Observation],
+        unobserved_phenomenon: bool = True,
     ):
         """
         Returns the phenomenon probability of existing at a set of locations (generally the whole grid) given a set of
@@ -121,9 +125,7 @@ class MarkovDecisionProcess(object):
         :param observations: List of observations y^{0:t}
         """
         phenomenon_probabilities = np.zeros(len(location_ids))
-        means, covariances = self.noisy_measurement_function(
-            location_ids, map, observations
-        )
+        means, covariances = self.measurement_function(location_ids, map, observations)
 
         erf_quantity_numerator = (np.ones(means.shape[0]) * map.params.u_tilde) - means
         erf_quantity_denominator = np.diag(
@@ -140,5 +142,9 @@ class MarkovDecisionProcess(object):
             phenomenon_probabilities[idx] = (
                 high_probability_factor + low_probability_factor
             )
+
+        if unobserved_phenomenon:
+            last_observation_location = observations[-1].location
+            phenomenon_probabilities[last_observation_location] = 0.0
 
         return phenomenon_probabilities

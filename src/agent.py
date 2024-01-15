@@ -75,6 +75,7 @@ class Agent(object):
                         [location_id for location_id in range(self.map.map_size)],
                         self.map,
                         observations,
+                        unobserved_phenomenon=False,
                     )
                 )
 
@@ -84,7 +85,7 @@ class Agent(object):
                     Observation(next_location, future_noisy_measurement)
                 )
 
-                # p(x_i | y_{0:k+1})
+                # p(\hat{x_i} | y_{0:k+1})
                 future_phenomenon_probabilities = (
                     self.mdp_handle.phenomenon_probability_function(
                         [location_id for location_id in range(self.map.map_size)],
@@ -93,13 +94,25 @@ class Agent(object):
                     )
                 )
 
-                # \sum_{i=1}^n D_KL(p(x_i | y_{0:k+1}) || p(x_i | y_{0:k}))
-                kl_divergence = np.sum(
+                # Note: Should use the unobserved phenonmenon for k+1 observations and
+                # observed phenomenon for k observations
+
+                # \sum_{i=1}^n D_KL(p(\hat{x_i} = 0 | y_{0:k+1}) || p(x_i = 0 | y_{0:k}))
+                kl_divergence_not_exist = np.sum(
+                    kl_div(
+                        1.0 - future_phenomenon_probabilities,
+                        1.0 - current_phenomenon_probabilities,
+                    )
+                )
+
+                # \sum_{i=1}^n D_KL(p(x_i = 1 | y_{0:k+1}) || p(x_i = 1 | y_{0:k}))
+                kl_divergence_exist = np.sum(
                     kl_div(
                         future_phenomenon_probabilities,
                         current_phenomenon_probabilities,
                     )
                 )
+                kl_divergence = kl_divergence_not_exist + kl_divergence_exist
 
                 action_rewards[idx] += (weights[index] / np.sqrt(np.pi)) * kl_divergence
 
