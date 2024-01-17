@@ -15,7 +15,7 @@ class MarkovDecisionProcess(object):
 
         self.update(start, map)
 
-    def update(self, location: int, map: Map):
+    def update(self, location: int, map: Map, unobserved_phenomenon: bool = False):
         """
         Updates the state that the agent is in
         :param location: Location that the agent is in now after executing an action
@@ -36,8 +36,6 @@ class MarkovDecisionProcess(object):
         if len(self.states) == 0:
             # We should not use unobserved phenonmenon probabilities for the first state
             unobserved_phenomenon = False
-        else:
-            unobserved_phenomenon = True
 
         phenomenon_probabilities = self.phenomenon_probability_function(
             [location_id for location_id in range(map.map_size)],
@@ -75,31 +73,24 @@ class MarkovDecisionProcess(object):
             location_ids, observation_locations
         )
 
-        # v(l^{0:t}, l^{t+1:t+h})
-        covariance_observations_futures = map.kernel_function(
-            observation_locations, location_ids
-        )
-
         # v(l^{0:t}, l^{0:t})
         covariance_observations = map.kernel_function(
             observation_locations, observation_locations
         )
 
-        mean = mean_of_futures + covariance_futures_observations @ np.linalg.inv(
-            covariance_observations
-            + np.eye(len(observations)) * np.power(map.measurement_noise, 2)
-        ) @ (
+        inverse_term = np.linalg.inv(
+            covariance_observations + np.eye(len(observations)) * np.power(0.01, 2)
+        )
+
+        mean = mean_of_futures + covariance_futures_observations @ inverse_term @ (
             np.array(observation_measurements)
             - map.mean_function(observation_locations)
         )
         covariance = (
             covariance_of_futures
             - covariance_futures_observations
-            @ np.linalg.inv(
-                covariance_observations
-                + np.eye(len(observations)) * np.power(map.measurement_noise, 2)
-            )
-            @ covariance_observations_futures
+            @ inverse_term
+            @ covariance_futures_observations.T
         )
 
         if not positive_definite_matrix(covariance):
@@ -116,8 +107,46 @@ class MarkovDecisionProcess(object):
         :param map: Map object to query the underlying GP
         :param observations: List of observations y^{0:t}
         """
-        mean, covariance = self.measurement_function(location_ids, map, observations)
-        covariance += np.eye(len(location_ids)) * np.power(map.measurement_noise, 2)
+        # m(l^{t+1:t+h}) and v(l^{t+1:t_h}, l^{t+1:t+h})
+        mean_of_futures = map.mean_function(location_ids)
+        covariance_of_futures = map.kernel_function(location_ids, location_ids)
+
+        # l^{0:t}
+        observation_locations = [observation.location for observation in observations]
+        # y^{0:t}
+        observation_measurements = [
+            observation.measurement for observation in observations
+        ]
+
+        # v(l^{t+1:t+h}, l^{0:t})
+        covariance_futures_observations = map.kernel_function(
+            location_ids, observation_locations
+        )
+
+        # v(l^{0:t}, l^{0:t})
+        covariance_observations = map.kernel_function(
+            observation_locations, observation_locations
+        )
+
+        inverse_term = np.linalg.inv(
+            covariance_observations
+            + np.eye(len(observations)) * np.power(map.params.measurement_noise, 2)
+        )
+
+        mean = mean_of_futures + covariance_futures_observations @ inverse_term @ (
+            np.array(observation_measurements)
+            - map.mean_function(observation_locations)
+        )
+        covariance = (
+            covariance_of_futures
+            - covariance_futures_observations
+            @ inverse_term
+            @ covariance_futures_observations.T
+        )
+
+        if not positive_definite_matrix(covariance):
+            warn("Covariance matrix is not positive definite!")
+
         return mean, covariance
 
     def phenomenon_probability_function(
@@ -134,7 +163,6 @@ class MarkovDecisionProcess(object):
         :param map: Map object to query the underlying GP
         :param observations: List of observations y^{0:t}
         """
-        phenomenon_probabilities = np.zeros(len(location_ids))
         means, covariances = self.measurement_function(location_ids, map, observations)
 
         erf_quantity_numerator = (np.ones(means.shape[0]) * map.params.u_tilde) - means
@@ -142,19 +170,15 @@ class MarkovDecisionProcess(object):
             np.sqrt(2 * covariances)
         )  # TODO: Should we be using diagonal entries only?
 
-        for idx in range(len(location_ids)):
-            high_probability_factor = (np.divide(map.params.P_1, 2)) * (
-                1.0 - erf(erf_quantity_numerator[idx] / erf_quantity_denominator[idx])
-            )
-            low_probability_factor = (np.divide(map.params.P_2, 2.0)) * (
-                1.0 + erf(erf_quantity_numerator[idx] / erf_quantity_denominator[idx])
-            )
-            phenomenon_probabilities[idx] = (
-                high_probability_factor + low_probability_factor
-            )
+        high_probability_factors = (np.divide(map.params.P_1, 2)) * (
+            1.0 - erf(erf_quantity_numerator / erf_quantity_denominator)
+        )
+        low_probability_factors = (np.divide(map.params.P_2, 2)) * (
+            1.0 + erf(erf_quantity_numerator / erf_quantity_denominator)
+        )
+        phenomenon_probabilities = high_probability_factors + low_probability_factors
 
         if unobserved_phenomenon:
-            # last_observation_location = observations[-1].location
             phenomenon_probabilities[-1] = 0.0
 
         return phenomenon_probabilities

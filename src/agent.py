@@ -16,10 +16,12 @@ class Agent(object):
         map: Map,
         mission_duration: int = 5,
         planning_horizon: int = 2,
+        use_vulcan: bool = True,
     ):
         self.id = id
         self.timer = 0
         self.map = map
+        self.use_vulcan = use_vulcan
         self.current_location = start_location
         self.mission_duration = mission_duration
         self.planning_horizon = planning_horizon
@@ -34,32 +36,34 @@ class Agent(object):
             print("Time = ", self.timer)
             horizon = min(self.planning_horizon, self.mission_duration - self.timer)
             _, best_action = self.extract_action(
-                self.timer, self.timer + horizon, self.mdp_handle.observations
+                self.current_location,
+                self.timer,
+                self.timer + horizon,
+                self.mdp_handle.observations,
             )
             self.current_location = self.execute_action(best_action)
-            self.mdp_handle.update(self.current_location, self.map)
+            self.mdp_handle.update(self.current_location, self.map, self.use_vulcan)
             self.timer += 1
 
     def extract_action(
         self,
+        current_location: int,
         current_timestep: int,
         planning_horizon: int,
         observations: List[Observation],
     ) -> Tuple[np.float64, Action]:
         """
         Extracts the best action to execute at the current timestep
+        :param current_location: Current location of the agent
         :param current_timestep: Current timestep k
         :param planning_horizon: Planning horizon k + h
         :param observations: List of observations y_{0:k}
         """
 
-        print("Extracting action for timestep = ", current_timestep)
-
         abscissae, weights = np.polynomial.hermite.hermgauss(self.map.params.J)
-        valid_neighbors = self.map.get_neighbors(self.current_location)
+        valid_neighbors = self.map.get_neighbors(current_location)
         action_rewards = np.zeros(len(valid_neighbors))
         for idx, next in enumerate(valid_neighbors):
-            print("Checking valid neighbor ", next.action_type)
             _, next_location = next.action_type, next.location
             (
                 future_measurement_mean,
@@ -114,6 +118,7 @@ class Agent(object):
                         locations_to_consider,
                         self.map,
                         future_observations,
+                        unobserved_phenomenon=self.use_vulcan,
                     )
                 )
 
@@ -140,9 +145,11 @@ class Agent(object):
                 action_rewards[idx] += (weights[index] / np.sqrt(np.pi)) * kl_divergence
 
                 if current_timestep + 1 < planning_horizon:
-                    print("Calling recursive extract_function for absicca = ", index)
                     next_action_reward, _ = self.extract_action(
-                        current_timestep + 1, planning_horizon, future_observations
+                        next_location,
+                        current_timestep + 1,
+                        planning_horizon,
+                        future_observations,
                     )
                     action_rewards[idx] += (
                         weights[index] / np.sqrt(np.pi)
@@ -151,12 +158,6 @@ class Agent(object):
         best_reward = np.max(action_rewards)
         best_action = valid_neighbors[np.argmax(action_rewards)]
 
-        print(
-            "Best action for current timestep "
-            + str(current_timestep)
-            + " is "
-            + best_action.action_type
-        )
         return best_reward, best_action
 
     def execute_action(self, action: Action) -> int:

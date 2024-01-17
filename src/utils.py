@@ -28,18 +28,21 @@ def get_nearest_locations(
     :param map: Map to query
     :param radius: Radius to search for nearest locations
     """
-    location_coords = []
-    for location_id in location_ids:
-        location_coords.append(map.get_coordinate(location_id))
 
-    locations = []
-    for location_id in range(0, map.map_size):
-        for location_coord in location_coords:
-            distance = float(
-                np.linalg.norm(location_coord - map.get_coordinate(location_id))
-            )
-            if distance <= radius:
-                locations.append(location_id)
-                break
-    locations = list(set(locations))
-    return locations
+    locations = np.arange(map.map_size)
+    location_rows = locations // map.num_of_cols  # y
+    location_columns = locations % map.num_of_cols  # x
+    location_coords = np.column_stack((location_rows, location_columns))
+
+    location_id_rows = np.array(location_ids) // map.num_of_cols  # y
+    location_id_columns = np.array(location_ids) % map.num_of_cols  # x
+    location_id_coords = np.column_stack((location_id_rows, location_id_columns))
+
+    distances = np.linalg.norm(
+        location_coords[:, np.newaxis, :] - location_id_coords, axis=2
+    )
+    indices = np.any(distances <= radius, axis=1)
+    linear_locations = np.arange(map.map_size)
+    return list(
+        set(linear_locations[i] for i in range(len(linear_locations)) if indices[i])
+    )

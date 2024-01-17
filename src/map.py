@@ -24,6 +24,7 @@ class Parameters:
     P_1: np.float64  # probability weight when conditional measurement exceeds threshold
     P_2: np.float64  # probability weight when conditional measurement is below threshold
     J: np.int64  # Order of the Gauss-Hermite quadrature
+    measurement_noise: np.float64  # Measurement noise
     distance_simplification: bool  # Whether to use the distance simplification
 
 
@@ -59,7 +60,7 @@ class Map(object):
             linearized_location = self.locations[location_means]
             location = self.get_coordinate(linearized_location)
             sample_locations = np.random.multivariate_normal(
-                location, np.eye(2), size=(1000)
+                location.T, np.eye(2), size=(1000)
             )
             for sample in sample_locations:
                 sample_x, sample_y = sample
@@ -78,12 +79,11 @@ class Map(object):
                 P_1=np.float64(0.98),
                 P_2=np.float64(0.002),
                 J=np.int64(5),
+                measurement_noise=np.float64(0.2),
                 distance_simplification=True,
             )
         else:
             self.params = params
-
-        self.measurement_noise = 0.2
 
     def get_row_coordinate(self, location_id: int) -> int:
         """
@@ -106,8 +106,8 @@ class Map(object):
         """
         return np.array(
             [
-                self.get_column_coordinate(location_id),
                 self.get_row_coordinate(location_id),
+                self.get_column_coordinate(location_id),
             ]
         )
 
@@ -183,10 +183,11 @@ class Map(object):
         Defines the mean function "m" for the Gaussian Process
         :param location_ids: List of linearized locations to compute the means for
         """
-        means = np.zeros(len(location_ids))
-        for idx, location_id in enumerate(location_ids):
-            location = self.get_coordinate(location_id)
-            means[idx] = self.grid[location[0], location[1]]
+
+        location_ids_rows = np.array(location_ids) // self.num_of_cols
+        location_ids_columns = np.array(location_ids) % self.num_of_cols
+        location_ids_coords = np.column_stack((location_ids_rows, location_ids_columns))
+        means = self.grid[location_ids_coords[:, 0], location_ids_coords[:, 1]]
         return means
 
     # Defines the exponential covariance function between two locations for the Gaussian Process
@@ -212,12 +213,26 @@ class Map(object):
         :param location_ids_a: List of linearized location IDs A
         :param location_ids_b: List of linearized location IDs B
         """
-        kernel_matrix = np.zeros((len(location_ids_a), len(location_ids_b)))
-        for idx_a, location_id_a in enumerate(location_ids_a):
-            for idx_b, location_id_b in enumerate(location_ids_b):
-                kernel_matrix[idx_a, idx_b] = self.covariance_function(
-                    location_id_a, location_id_b
-                )
+
+        location_ids_a_rows = np.array(location_ids_a) // self.num_of_cols
+        location_ids_a_columns = np.array(location_ids_a) % self.num_of_cols
+        location_ids_a_coords = np.column_stack(
+            (location_ids_a_rows, location_ids_a_columns)
+        )
+
+        location_ids_b_rows = np.array(location_ids_b) // self.num_of_cols
+        location_ids_b_columns = np.array(location_ids_b) % self.num_of_cols
+        location_ids_b_coords = np.column_stack(
+            (location_ids_b_rows, location_ids_b_columns)
+        )
+
+        pairwise_distances = np.linalg.norm(
+            location_ids_a_coords[:, np.newaxis, :] - location_ids_b_coords, axis=2
+        )
+        kernel_matrix = self.params.theta_1 * np.exp(
+            -pairwise_distances / np.power(self.params.theta_2, 2)
+        )
+
         return kernel_matrix
 
     def get_observation(self, location_id: int) -> Observation:
