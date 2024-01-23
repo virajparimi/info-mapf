@@ -2,49 +2,18 @@ import os
 import sys
 import numpy as np
 from copy import deepcopy
-from typing import Union, List
 from argparse import ArgumentParser
 from matplotlib import pyplot as plt
 
 from cProfile import Profile
 from pstats import Stats, SortKey
 
-sys.path.append("/home/mers/Desktop/Github/Multi-Agent_Path_Finding/info-mapf/src")
+# sys.path.append("/home/mers/Desktop/Github/Multi-Agent_Path_Finding/info-mapf/src")
+sys.path.append("/Users/viraj/Desktop/Work/Research/MAPF-INFO-GAIN/info-mapf/src")
 
 from agent import Agent  # NOQA
+from utils import generate_map  # NOQA
 from map import Map, Parameters  # NOQA
-
-
-def generate_map(
-    rows: int,
-    columns: int,
-    agent_locations: Union[List[List[int]], None] = None,
-    gp_means: Union[List[int], None] = None,
-    gp_locations: Union[List[List[int]], None] = None,
-    parameters: Union[Parameters, None] = None,
-) -> Map:
-    """
-    Generates a random maze of size rows x columns
-    :param rows: Number of rows
-    :param columns: Number of columns
-    :return: Map object
-    """
-    maze = np.ones((rows, columns), dtype=np.bool8)
-
-    if agent_locations is None:
-        center = [0, 0]
-        agent_locations = [center]
-
-    for agent_location in agent_locations:
-        maze[agent_location[0], agent_location[1]] = False
-
-    if gp_means is None:
-        gp_means = [1]
-    if gp_locations is None:
-        gp_locations = [[rows // 2, columns // 2]]
-
-    map = Map(maze, means=gp_means, locations=gp_locations, params=parameters)
-    return map
 
 
 if __name__ == "__main__":
@@ -128,7 +97,7 @@ if __name__ == "__main__":
     print(vulcan_path)
 
     plt.plot([x[1] for x in vulcan_path], [x[0] for x in vulcan_path], "r--", alpha=0.7)
-    plt.imshow(map.grid)
+    plt.imshow(map.grid, cmap="hot")
     plt.savefig(figures_base_path + "vulcan-" + args.type + ".png")
 
     plt.clf()
@@ -157,5 +126,5 @@ if __name__ == "__main__":
         "b--",
         alpha=0.7,
     )
-    plt.imshow(map.grid)
+    plt.imshow(map.grid, cmap="hot")
     plt.savefig(figures_base_path + "conventional-" + args.type + ".png")
