@@ -98,7 +98,11 @@ if __name__ == "__main__":
         )
     elif args.type == "multi-large":
         map = generate_map(
-            11, 11, gp_means=[1, 1], gp_locations=[[1, 1], [10, 10]], parameters=params
+            11,
+            11,
+            gp_means=[1, 1, 1, 1, 1],
+            gp_locations=[[1, 1], [8, 2], [5, 5], [2, 8], [10, 10]],
+            parameters=params,
         )
     else:
         raise ValueError("Invalid type")
@@ -131,7 +135,11 @@ if __name__ == "__main__":
 
     conventional_map = deepcopy(map)
     conventional_agent = Agent(
-        id=1, start_location=0, map=conventional_map, mission_duration=mission_duration
+        id=1,
+        start_location=0,
+        map=conventional_map,
+        mission_duration=mission_duration,
+        use_vulcan=False,
     )
     with Profile() as prof:
         print(f"{conventional_agent.adaptive_search()}")

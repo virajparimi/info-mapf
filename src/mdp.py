@@ -179,6 +179,10 @@ class MarkovDecisionProcess(object):
         phenomenon_probabilities = high_probability_factors + low_probability_factors
 
         if unobserved_phenomenon:
-            phenomenon_probabilities[-1] = 0.0
+            last_observation_location = observations[-1].location
+            last_observation_location_index = location_ids.index(
+                last_observation_location
+            )
+            phenomenon_probabilities[last_observation_location_index] = 0.0
 
         return phenomenon_probabilities
