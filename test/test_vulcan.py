@@ -8,8 +8,7 @@ from matplotlib import pyplot as plt
 from cProfile import Profile
 from pstats import Stats, SortKey
 
-# sys.path.append("/home/mers/Desktop/Github/Multi-Agent_Path_Finding/info-mapf/src")
-sys.path.append("/Users/viraj/Desktop/Work/Research/MAPF-INFO-GAIN/info-mapf/src")
+sys.path.append(os.path.join(os.path.dirname(os.path.dirname(__file__)), "src"))
 
 from agent import Agent  # NOQA
 from utils import generate_map  # NOQA
@@ -63,14 +62,14 @@ if __name__ == "__main__":
         map = generate_map(11, 11, parameters=params)
     elif args.type == "multi-small":
         map = generate_map(
-            5, 5, gp_means=[1, 1], gp_locations=[[1, 1], [4, 4]], parameters=params
+            5, 5, gp_means=[1, 1], gp_locations=[(1, 1), (4, 4)], parameters=params
         )
     elif args.type == "multi-large":
         map = generate_map(
             11,
             11,
             gp_means=[1, 1, 1, 1, 1],
-            gp_locations=[[1, 1], [8, 2], [5, 5], [2, 8], [10, 10]],
+            gp_locations=[(1, 1), (8, 2), (5, 5), (2, 8), (10, 10)],
             parameters=params,
         )
     else:

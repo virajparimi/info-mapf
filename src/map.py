@@ -31,7 +31,7 @@ class Parameters:
 class Map(object):
     def __init__(
         self,
-        maze: NDArray[np.bool8],
+        maze: NDArray[np.bool_],
         means: Union[List, None] = None,
         locations: Union[List, None] = None,
         params: Union[Parameters, None] = None,
@@ -163,6 +163,25 @@ class Map(object):
             if self.valid_move(current, next.location):
                 neighbors.append(next)
         return neighbors
+
+    def extract_next_location(self, current: int, action: str) -> Union[int, bool]:
+        """
+        Extracts the next linearized location given the current location and the action taken
+        :param current: Current linearized location of an agent
+        :param action: String represenation of the action taken by the agent
+        """
+        next = current
+        if action == "Right":
+            next = current + 1
+        elif action == "Left":
+            next = current - 1
+        elif action == "Down":
+            next = current + self.num_of_cols
+        elif action == "Up":
+            next = current - self.num_of_cols
+        else:
+            return False
+        return next if self.valid_move(current, next) else False
 
     def update_agent_location(self, current: int, next: int):
         """

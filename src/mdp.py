@@ -94,7 +94,7 @@ class MarkovDecisionProcess(object):
         )
 
         if not positive_definite_matrix(covariance):
-            warn("Covariance matrix is not positive definite!")
+            warn("Covariance matrix is not positive definite!", stacklevel=2)
 
         return mean, covariance
 
@@ -145,7 +145,7 @@ class MarkovDecisionProcess(object):
         )
 
         if not positive_definite_matrix(covariance):
-            warn("Covariance matrix is not positive definite!")
+            warn("Covariance matrix is not positive definite!", stacklevel=2)
 
         return mean, covariance
 

@@ -1,7 +1,7 @@
 import numpy as np
 from map import Map, Parameters
 from numpy.typing import NDArray
-from typing import Any, List, Union
+from typing import Any, List, Union, Tuple
 
 
 def positive_definite_matrix(A: NDArray[Any]):
@@ -52,9 +52,9 @@ def generate_map(
     rows: int,
     columns: int,
     maze: Union[NDArray[Any], None] = None,
-    agent_locations: Union[List[List[int]], None] = None,
+    agent_locations: Union[List[Tuple[int, int]], None] = None,
     gp_means: Union[List[int], None] = None,
-    gp_locations: Union[List[List[int]], None] = None,
+    gp_locations: Union[List[Tuple[int, int]], None] = None,
     parameters: Union[Parameters, None] = None,
 ) -> Map:
     """
@@ -73,7 +73,7 @@ def generate_map(
         maze = np.array(maze, dtype=np.bool_)
 
     if agent_locations is None:
-        center = [0, 0]
+        center = (0, 0)
         agent_locations = [center]
 
     for agent_location in agent_locations:
@@ -82,7 +82,7 @@ def generate_map(
     if gp_means is None:
         gp_means = [1]
     if gp_locations is None:
-        gp_locations = [[rows // 2, columns // 2]]
+        gp_locations = [(rows // 2, columns // 2)]
 
     map = Map(maze, means=gp_means, locations=gp_locations, params=parameters)
     return map

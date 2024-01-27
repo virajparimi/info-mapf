@@ -1,7 +1,7 @@
 # In this scenario we have multiple agents with rewards spread across an area.
 # After each agent arrives in a space with a reward, the reward is halved for the next agent
 
-# No need for this file
+# [VIRAJ] - No need for this file
 
 import numpy as np
 from warnings import warn

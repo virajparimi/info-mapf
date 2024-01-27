@@ -700,8 +700,8 @@ def example(print_maze=True):
     maze = np.array(maze)
     maze = 1 - maze  # Walls are 0 and free space is 1
 
-    start = [0, 0]
-    end = [len(maze) - 1, len(maze[0]) - 1]
+    start = (0, 0)
+    end = (len(maze) - 1, len(maze[0]) - 1)
 
     map = generate_map(maze.shape[0], maze.shape[1], maze, [start])
     linear_start = map.linearize_coordinate(start[0], start[1])
