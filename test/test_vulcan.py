@@ -1,19 +1,18 @@
 import os
 import sys
-import numpy as np
-from copy import deepcopy
 from argparse import ArgumentParser
-from matplotlib import pyplot as plt
-
+from copy import deepcopy
 from cProfile import Profile
-from pstats import Stats, SortKey
+from pstats import SortKey, Stats
+
+import numpy as np
+from matplotlib import pyplot as plt
 
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(__file__)), "src"))
 
 from agent import Agent  # NOQA
-from utils import generate_map  # NOQA
 from map import Map, Parameters  # NOQA
-
+from utils import generate_map  # NOQA
 
 if __name__ == "__main__":
     figures_base_path = (

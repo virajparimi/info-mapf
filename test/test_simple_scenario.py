@@ -1,12 +1,14 @@
 import os
 import sys
-from map import Map
-from astar import astar
-from agent import Agent
 from typing import List, Tuple
-from utils import generate_map
+
 import matplotlib.pyplot as plt
+
+from agent import Agent
+from astar import astar
+from map import Map
 from multi_agent_search import multi_agent_search
+from utils import generate_map
 
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(__file__)), "src"))
 

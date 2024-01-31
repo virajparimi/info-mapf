@@ -1,11 +1,59 @@
+from __future__ import annotations
+
+from typing import List, Tuple, Union
+
+import queue
 import numpy as np
-from typing import List, Tuple
 from scipy.special import kl_div
+
+from map import Action, Map, Observation
 from mdp import MarkovDecisionProcess
 from utils import get_nearest_locations
-from map import Map, Observation, Action
 
-# Default agent class with 4 cardinal deterministic actions
+
+class MultiAgentSearchNode(object):
+    def __init__(
+        self, parent: Union[MultiAgentSearchNode, None], agents_actions: List[str]
+    ):
+        self.parent = parent
+        self.action_prefixes = agents_actions
+
+        self.f = 0.0
+
+    @property
+    def g(self):
+        # Combined multi-agent information gain - true estimate
+        return self.g
+
+    @property
+    def h(self):
+        # Sum of single-agent information gain - heuristic estimate
+        return self.h
+
+    @g.setter
+    def g(self, value: np.float64):
+        self.g = value
+        self.f = np.add(self.g, self.h)
+
+    @h.setter
+    def h(self, value: np.float64):
+        self.h = value
+        self.f = np.add(self.g, self.h)
+
+    def __repr__(self):
+        return (
+            f"Multi-Agent SearchNode Summary:\n\tAgent Action Prefixes: {self.action_prefixes}"
+            f"\n\tG-val (Multi-Agent Information Gain): {self.g}"
+            f"\n\tH-val (Sum of Single-Agent Information Gain: {self.h}"
+        )
+
+    # Defining less than for purposes of heap queue
+    def __lt__(self, other):
+        return self.f > other.f
+
+    # Defining greater than for purposes of heap queue
+    def __gt__(self, other):
+        return self.f < other.f
 
 
 class Agent(object):
@@ -168,3 +216,53 @@ class Agent(object):
         _, action_location = action.action_type, action.location
         self.map.update_agent_location(self.current_location, action_location)
         return action_location
+
+    def multi_agent_search(
+        self, agent_bubbles: List[Agent], shared_observations: List[Observation]
+    ) -> Tuple[np.float64, Action]:
+        """
+        Performs the multi-agent search algorithm for a single agent assuming they are
+        in communication range of other agents
+        :param agent_bubbles: List of other agents that the agent is within communication range of
+        """
+
+        root_node = MultiAgentSearchNode(None, [])
+
+        # TODO: Probably not needed to compute the h-value for the root node
+        best_reward, best_acton = self.extract_action(
+            self.current_location,
+            self.timer,
+            self.timer + self.planning_horizon,
+            shared_observations,
+        )
+        root_node.h = np.add(root_node.h, best_reward)
+        for agent in agent_bubbles:
+            best_reward, best_action = agent.extract_action(
+                agent.current_location,
+                agent.timer,
+                agent.timer + agent.planning_horizon,
+                shared_observations,
+            )
+            root_node.h = np.add(root_node.h, best_reward)
+
+        open_set = queue.PriorityQueue()
+        open_set.put(root_node)
+
+        best_action = Action(Action.STAY, self.current_location)
+        best_gain = np.float64(0.0)
+
+        while not open_set.empty():
+            current = open_set.get()
+
+            if current.f < best_gain:
+                return best_gain, best_action
+
+            agents_paths = current.extract_paths(init_poses, map)
+            return agents_paths, best_gain
+
+        return self.extract_action(
+            self.current_location,
+            self.timer,
+            self.timer + self.planning_horizon,
+            self.mdp_handle.observations,
+        )

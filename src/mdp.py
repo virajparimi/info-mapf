@@ -1,8 +1,10 @@
-import numpy as np
-from warnings import warn
-from scipy.special import erf
 from typing import List, Tuple
+from warnings import warn
+
+import numpy as np
 from numpy.typing import NDArray
+from scipy.special import erf
+
 from map import Map, Observation
 from utils import positive_definite_matrix
 

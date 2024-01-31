@@ -1,7 +1,9 @@
+from typing import Any, List, Tuple, Union
+
 import numpy as np
-from map import Map, Parameters
 from numpy.typing import NDArray
-from typing import Any, List, Union, Tuple
+
+from map import Map, Parameters
 
 
 def positive_definite_matrix(A: NDArray[Any]):

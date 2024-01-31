@@ -3,9 +3,10 @@
 
 # [VIRAJ] - No need for this file
 
-import numpy as np
-from warnings import warn
 from typing import List, Tuple, Union
+from warnings import warn
+
+import numpy as np
 
 
 class RewardMap:
@@ -67,10 +68,10 @@ class GaussianRewardMap(RewardMap):
         :param add_amount: Amount to add to each grid cell
         """
         if self.means is None:
-            warn("No means specified for GaussianRewardMap")
+            warn("No means specified for GaussianRewardMap", stacklevel=2)
             return self.grid
         if self.locations is None:
-            warn("No locations specified for GaussianRewardMap")
+            warn("No locations specified for GaussianRewardMap", stacklevel=2)
             return self.grid
 
         for location_means in range(0, len(self.means)):

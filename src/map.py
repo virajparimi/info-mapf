@@ -1,7 +1,8 @@
-import numpy as np
-from typing import Union, List
-from numpy.typing import NDArray
 from dataclasses import dataclass
+from typing import List, Union
+
+import numpy as np
+from numpy.typing import NDArray
 
 
 @dataclass
@@ -22,7 +23,9 @@ class Parameters:
     theta_2: np.float64  # characteristic length for covariance decay
     u_tilde: np.float64  # threshold for conditional measurement mean
     P_1: np.float64  # probability weight when conditional measurement exceeds threshold
-    P_2: np.float64  # probability weight when conditional measurement is below threshold
+    P_2: (
+        np.float64
+    )  # probability weight when conditional measurement is below threshold
     J: np.int64  # Order of the Gauss-Hermite quadrature
     measurement_noise: np.float64  # Measurement noise
     distance_simplification: bool  # Whether to use the distance simplification

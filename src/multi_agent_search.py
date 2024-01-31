@@ -1,18 +1,17 @@
-# This file is for the actual search algorithm, not including the information gain calculations
-
 from __future__ import annotations
 
 import copy
-import queue
-import numpy as np
-from map import Map
-from astar import astar
 import itertools as iter
+import queue
 from typing import List, Tuple, Union
+
+import numpy as np
+
+from astar import astar
+from map import Map
 
 
 class SearchNode:
-
     """
     The list of action sequences of each agent that is represented by this node
     action_seqs[i] should be the sequence of actions taken by the ith agent
@@ -57,9 +56,9 @@ class SearchNode:
         self,
         actions_taken: List[List[str]],
         parent: Union[SearchNode, None],
-        min_info: np.float64 = np.float64(0),
-        max_info: np.float64 = np.float64(np.inf),
-        current_gain: np.float64 = np.float64(0),
+        min_info: float = 0.0,
+        max_info: float = np.inf,
+        current_gain: float = 0.0,
     ):
         self.action_seqs = actions_taken
         self.parent = parent
@@ -69,12 +68,15 @@ class SearchNode:
         self.current_info_gain = current_gain
 
     def get_children_seqs(
-        self, agent_actions: List[str] = ["Right", "Left", "Up", "Down"]
+        self, agent_actions: Union[List[str], None] = None
     ) -> List[List[List[str]]]:
         """
         Return a list of action sequences corresponding to one step extensions of the node's path prefix
         :param agent_actions: The possible actions agents can take
         """
+
+        if agent_actions is None:
+            agent_actions = ["Right", "Left", "Up", "Down"]
 
         extensions = []
         for ext in iter.product(agent_actions, repeat=len(self.action_seqs)):
