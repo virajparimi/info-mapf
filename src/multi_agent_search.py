@@ -76,7 +76,7 @@ class SearchNode:
         """
 
         if agent_actions is None:
-            agent_actions = ["Right", "Left", "Up", "Down"]
+            agent_actions = ["Wait", "Right", "Left", "Up", "Down"]
 
         extensions = []
         for ext in iter.product(agent_actions, repeat=len(self.action_seqs)):

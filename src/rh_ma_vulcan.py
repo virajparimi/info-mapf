@@ -1,7 +1,7 @@
-from typing import List
-
-from agent import Agent
 from map import Map
+from agent import Agent
+from typing import List
+from copy import deepcopy
 
 
 class Multi_Agent_Vulcan(object):
@@ -15,19 +15,35 @@ class Multi_Agent_Vulcan(object):
     def planner(self):
         while self.timer < self.mission_duration:
             print("Time = ", self.timer)
+            agent_actions = []
             # Collect agents within communication range
             agent_bubbles = self.within_range_agents()
-            agent_actions = []
             # Command each agent to execute their adaptive search algorithm for one step
             for idx, agent in enumerate(self.agents):
                 if len(agent_bubbles[idx]) > 0:
                     # Start multi-agent search algorithm with respect to this agent
                     shared_observations = agent.mdp_handle.observations
-                    for other_agent in agent_bubbles[idx]:
-                        shared_observations += other_agent.mdp_handle.observations
+                    for other_agents in agent_bubbles[idx]:
+                        shared_observations += other_agents.mdp_handle.observations
+                    shared_observations = list(
+                        set(shared_observations)
+                    )  # ensure uniqueness of the observations
+
+                    horizon = min(
+                        agent.planning_horizon, agent.mission_duration - self.timer
+                    )
+
+                    agent.mdp_handle.observations = shared_observations
+                    for other_agents in agent_bubbles[idx]:
+                        other_agents.mdp_handle.observations = shared_observations
+                        # States of the MDP handle are not updated here as I dont think we need to
 
                     _, best_action = agent.multi_agent_search(
-                        agent_bubbles[idx], shared_observations
+                        agent_bubbles[idx],
+                        self.timer,
+                        self.timer + horizon,
+                        shared_observations,
+                        self.map,
                     )
                 else:
                     # Re-use vulcan for this single agent
@@ -45,7 +61,11 @@ class Multi_Agent_Vulcan(object):
 
             # Once we have extracted the best actions for each agent, we execute them
             for agent in self.agents:
+                agent_old_location = deepcopy(agent.current_location)
                 agent.current_location = agent.execute_action(agent_actions[agent.id])
+                self.map.update_agent_location(
+                    agent_old_location, agent.current_location
+                )
                 agent.mdp_handle.update(agent.current_location, self.map, True)
                 agent.timer += 1
                 self.timer += 1

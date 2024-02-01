@@ -1,19 +1,17 @@
-from typing import List, Tuple
-from warnings import warn
-
 import numpy as np
-from numpy.typing import NDArray
+from warnings import warn
 from scipy.special import erf
-
-from map import Map, Observation
+from typing import List, Tuple
+from numpy.typing import NDArray
 from utils import positive_definite_matrix
+from map import Map, Observation, ActionType
 
 
 class MarkovDecisionProcess(object):
     def __init__(self, start: int, map: Map):
         self.states = []
         self.observations = []
-        self.actions = ["Left", "Right", "Up", "Down"]
+        self.actions = [action_type.value for action_type in ActionType]
 
         self.update(start, map)
 

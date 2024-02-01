@@ -1,8 +1,16 @@
-from dataclasses import dataclass
-from typing import List, Union
-
 import numpy as np
+from enum import Enum
+from typing import List, Union
 from numpy.typing import NDArray
+from dataclasses import dataclass
+
+
+class ActionType(Enum):
+    Wait = "Wait"
+    Left = "Left"
+    Right = "Right"
+    Up = "Up"
+    Down = "Down"
 
 
 @dataclass
@@ -13,7 +21,7 @@ class Observation:
 
 @dataclass
 class Action:
-    action_type: str
+    action_type: ActionType
     location: int
 
 
@@ -145,6 +153,7 @@ class Map(object):
         if (
             next < 0
             or next >= self.map_size
+            or current == next
             or not self.map[next_location[0], next_location[1]]
         ):
             return False
@@ -157,10 +166,11 @@ class Map(object):
         """
         neighbors = []
         candidates = [
-            Action("Right", current + 1),
-            Action("Left", current - 1),
-            Action("Down", current + self.num_of_cols),
-            Action("Up", current - self.num_of_cols),
+            Action(ActionType.Wait, current),
+            Action(ActionType.Right, current + 1),
+            Action(ActionType.Left, current - 1),
+            Action(ActionType.Down, current + self.num_of_cols),
+            Action(ActionType.Up, current - self.num_of_cols),
         ]
         for next in candidates:
             if self.valid_move(current, next.location):
@@ -173,7 +183,9 @@ class Map(object):
         :param current: Current linearized location of an agent
         :param action: String represenation of the action taken by the agent
         """
-        next = current
+        next = None
+        if action == "Wait":
+            next = current
         if action == "Right":
             next = current + 1
         elif action == "Left":
