@@ -248,7 +248,7 @@ class Agent(object):
         open_set = queue.PriorityQueue()
         open_set.put(root_node)
 
-        best_action = Action(Action.STAY, self.current_location)
+        # best_action = Action(Action.STAY, self.current_location)
         best_gain = np.float64(0.0)
 
         while not open_set.empty():
