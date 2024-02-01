@@ -257,9 +257,6 @@ class Agent(object):
             if current.f < best_gain:
                 return best_gain, best_action
 
-            agents_paths = current.extract_paths(init_poses, map)
-            return agents_paths, best_gain
-
         return self.extract_action(
             self.current_location,
             self.timer,
