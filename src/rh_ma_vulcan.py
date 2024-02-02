@@ -124,6 +124,7 @@ class Multi_Agent_Vulcan(object):
                         horizon,
                         shared_observations,
                     )
+                    assert best_action is not None
                 else:
                     # Re-use vulcan for this single agent
                     horizon = min(
@@ -210,7 +211,7 @@ class Multi_Agent_Vulcan(object):
             node.g = np.float64(0.0)
         else:
             node.g = self.compute_multi_agent_information_gain(
-                node, agent_bubbles, shared_observations
+                node, agent_bubbles, planning_horizon, shared_observations
             )
 
         return node
@@ -222,20 +223,23 @@ class Multi_Agent_Vulcan(object):
         planning_horizon: int,
         agent_locations_history: Dict[int, Dict[int, int]],
         observations: List[Observation],
-    ) -> np.float64:
-
+        agents_future_measurements: Dict[int, List[Observation]],
+    ) -> Tuple[np.float64, Dict[int, List[Observation]]]:
         g_val = np.float64(0.0)
+        measurements = {current_timestep: []}
+
         abscissae, weights = np.polynomial.hermite.hermgauss(self.map.params.J)
         agent_location = agent_locations_history[current_timestep][agent.id]
 
-        (
-            future_measurement_mean,
-            future_measurement_covariance,
-        ) = agent.mdp_handle.noisy_measurement_function(
-            [agent_location], agent.map, observations
-        )
-
+        indexed_observations = observations.copy()
         for index in range(self.map.params.J):
+            indexed_observations += agents_future_measurements[index]
+            (
+                future_measurement_mean,
+                future_measurement_covariance,
+            ) = agent.mdp_handle.noisy_measurement_function(
+                [agent_location], agent.map, observations
+            )
 
             future_noisy_measurement = (
                 abscissae[index]
@@ -248,9 +252,9 @@ class Multi_Agent_Vulcan(object):
 
             # y_{0:k+1}
             future_observations = observations.copy()
-            future_observations.append(
-                Observation(agent_location, future_noisy_measurement)
-            )
+            new_observation = Observation(agent_location, future_noisy_measurement)
+            future_observations.append(new_observation)
+            measurements[current_timestep].append(new_observation)
 
             if self.map.params.distance_simplification:
                 locations_to_consider = get_nearest_locations(
@@ -309,15 +313,19 @@ class Multi_Agent_Vulcan(object):
             g_val = (weights[index] / np.sqrt(np.pi)) * kl_divergence
 
             if current_timestep + 1 < planning_horizon:
-                g_val += self.recursive_information_gain(
+                future_g_val, future_measurements = self.recursive_information_gain(
                     agent,
                     current_timestep + 1,
                     planning_horizon,
                     agent_locations_history,
                     future_observations,
+                    agents_future_measurements,
                 )
+                for f_timestep, f_measurement in future_measurements.items():
+                    measurements[f_timestep] = f_measurement
+                g_val = np.add(g_val, future_g_val)
 
-        return g_val
+        return g_val, measurements
 
     def compute_multi_agent_information_gain(
         self,
@@ -342,21 +350,23 @@ class Multi_Agent_Vulcan(object):
             agent_locations_history[ancestor.timestep] = ancestor.agent_locations
             ancestor = ancestor.parent
 
-        abscissae, weights = np.polynomial.hermite.hermgauss(self.map.params.J)
-
+        agents_future_measurements = {index: [] for index in range(self.map.params.J)}
         for idx, agent in enumerate(agent_bubbles):
-
             agent_observation_handle = deepcopy(shared_observations)
-            g_val = np.add(
-                g_val,
-                self.recursive_information_gain(
-                    agent,
-                    planning_horizon - current.timestep + 1,
-                    planning_horizon + 1,
-                    agent_locations_history,
-                    agent_observation_handle,
-                ),
+            future_g_val, agent_f_measurements = self.recursive_information_gain(
+                agent,
+                planning_horizon - current.timestep + 1,
+                planning_horizon + 1,
+                agent_locations_history,
+                agent_observation_handle,
+                agents_future_measurements,
             )
+
+            for index in range(self.map.params.J):
+                for f_timestep, f_measurement in agent_f_measurements.items():
+                    agents_future_measurements[index].append(f_measurement[index])
+            # TODO: We have timestep, list of measurements for each index map. Need to convert it to index, list of measurements for each timestep and update the observations based on that. Keep collecting that same information for all the "past" agents and then repeat the process for the "future" agents
+            g_val = np.add(g_val, future_g_val)
 
         return np.float64(0.0)
 
@@ -366,7 +376,7 @@ class Multi_Agent_Vulcan(object):
         agent_bubbles: List[Agent],
         planning_horizon: int,
         shared_observations: List[Observation],
-    ) -> Tuple[np.float64, Action]:
+    ) -> Tuple[np.float64, Union[Action, None]]:
         """
         Performs the multi-agent search algorithm for a single agent assuming they are
         in communication range of other agents
@@ -413,7 +423,6 @@ class Multi_Agent_Vulcan(object):
             else:
                 action_prefix_extensions = current.extract_action_prefix_extensions()
                 for action_prefixes in action_prefix_extensions:
-
                     next_locations = {}
                     # Validate whether the action prefix can be executed
                     invalid_action_prefix = False
@@ -443,9 +452,4 @@ class Multi_Agent_Vulcan(object):
 
                     open_set.put(child_node)
 
-        return self.extract_action(
-            self.current_location,
-            self.timer,
-            self.timer + self.planning_horizon,
-            self.mdp_handle.observations,
-        )
+        return best_gain, None
