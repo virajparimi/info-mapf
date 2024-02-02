@@ -4,6 +4,8 @@ import queue
 import numpy as np
 from copy import deepcopy
 from map import Map, ActionType
+from scipy.special import kl_div
+from utils import get_nearest_locations
 from typing import List, Union, Dict, Tuple
 from agent import Agent, Observation, Action
 
@@ -119,8 +121,7 @@ class Multi_Agent_Vulcan(object):
                     _, best_action = self.multi_agent_search(
                         agent,
                         agent_bubbles[idx],
-                        self.timer,
-                        self.timer + horizon,
+                        horizon,
                         shared_observations,
                     )
                 else:
@@ -171,11 +172,198 @@ class Multi_Agent_Vulcan(object):
         if node.parent is not None:
             self.update_min_costs(node.parent, reward)
 
+    def construct_node(
+        self,
+        parent: Union[MultiAgentSearchNode, None],
+        action_prefixes: Dict[int, List[str]],
+        agent_locations: Dict[int, int],
+        agent_bubbles: List[Agent],
+        planning_horizon: int,
+        shared_observations: List[Observation],
+    ) -> MultiAgentSearchNode:
+        """
+        Construct the multi-agent search node and sets the timestep, g-val and h-val
+        :param parent: The parent node of the current node
+        :param action_prefixes: The action prefixes for each agent
+        :param agent_locations: The locations of each agent after executing the action prefixes
+        :param agent_bubbles: List of agents that the agent is within communication range including itself
+        :param planning_horizon: Planning horizon k + h
+        :param shared_observations: List of shared observations between the agents inside the communication range
+        """
+        node = MultiAgentSearchNode(parent, action_prefixes, agent_locations)
+        if parent is not None:
+            node.timestep = parent.timestep + 1
+
+        if node.timestep >= planning_horizon:
+            node.h = np.float64(0.0)
+        else:
+            for agent_in_comm_range in agent_bubbles:
+                best_reward, _ = agent_in_comm_range.extract_action(
+                    agent_in_comm_range.current_location,
+                    node.timestep,
+                    planning_horizon - node.timestep,
+                    shared_observations,
+                )
+                node.h = np.add(node.h, best_reward)
+
+        if parent is None:
+            node.g = np.float64(0.0)
+        else:
+            node.g = self.compute_multi_agent_information_gain(
+                node, agent_bubbles, shared_observations
+            )
+
+        return node
+
+    def recursive_information_gain(
+        self,
+        agent: Agent,
+        current_timestep: int,
+        planning_horizon: int,
+        agent_locations_history: Dict[int, Dict[int, int]],
+        observations: List[Observation],
+    ) -> np.float64:
+
+        g_val = np.float64(0.0)
+        abscissae, weights = np.polynomial.hermite.hermgauss(self.map.params.J)
+        agent_location = agent_locations_history[current_timestep][agent.id]
+
+        (
+            future_measurement_mean,
+            future_measurement_covariance,
+        ) = agent.mdp_handle.noisy_measurement_function(
+            [agent_location], agent.map, observations
+        )
+
+        for index in range(self.map.params.J):
+
+            future_noisy_measurement = (
+                abscissae[index]
+                * np.diag(
+                    np.sqrt(2 * future_measurement_covariance)
+                )  # TODO: Do we need extract the diagnoal entries here?
+                + future_measurement_mean
+            )
+            future_noisy_measurement = future_noisy_measurement[0]
+
+            # y_{0:k+1}
+            future_observations = observations.copy()
+            future_observations.append(
+                Observation(agent_location, future_noisy_measurement)
+            )
+
+            if self.map.params.distance_simplification:
+                locations_to_consider = get_nearest_locations(
+                    [
+                        observation.location for observation in future_observations
+                    ],  # Using the distance simplification
+                    self.map,
+                    np.multiply(
+                        self.map.params.theta_1, 5.0
+                    ),  # TODO: Should we be using theta_1 or theta_2 here?
+                )
+            else:
+                locations_to_consider = [
+                    location_id for location_id in range(self.map.map_size)
+                ]
+
+            # p(x_i | y_{0:k})
+            current_phenomenon_probabilities = (
+                agent.mdp_handle.phenomenon_probability_function(
+                    locations_to_consider,
+                    self.map,
+                    observations,
+                    unobserved_phenomenon=False,
+                )
+            )
+
+            # p(\hat{x_i} | y_{0:k+1})
+            future_phenomenon_probabilities = (
+                agent.mdp_handle.phenomenon_probability_function(
+                    locations_to_consider,
+                    self.map,
+                    future_observations,
+                    unobserved_phenomenon=agent.use_vulcan,
+                )
+            )
+
+            # Note: Should use the unobserved phenonmenon for k+1 observations and
+            # observed phenomenon for k observations
+
+            # \sum_{i=1}^n D_KL(p(\hat{x_i} = 0 | y_{0:k+1}) || p(x_i = 0 | y_{0:k}))
+            kl_divergence_not_exist = np.sum(
+                kl_div(
+                    1.0 - future_phenomenon_probabilities,
+                    1.0 - current_phenomenon_probabilities,
+                )
+            )
+
+            # \sum_{i=1}^n D_KL(p(x_i = 1 | y_{0:k+1}) || p(x_i = 1 | y_{0:k}))
+            kl_divergence_exist = np.sum(
+                kl_div(
+                    future_phenomenon_probabilities,
+                    current_phenomenon_probabilities,
+                )
+            )
+            kl_divergence = kl_divergence_not_exist + kl_divergence_exist
+            g_val = (weights[index] / np.sqrt(np.pi)) * kl_divergence
+
+            if current_timestep + 1 < planning_horizon:
+                g_val += self.recursive_information_gain(
+                    agent,
+                    current_timestep + 1,
+                    planning_horizon,
+                    agent_locations_history,
+                    future_observations,
+                )
+
+        return g_val
+
+    def compute_multi_agent_information_gain(
+        self,
+        current: MultiAgentSearchNode,
+        agent_bubbles: List[Agent],
+        planning_horizon: int,
+        shared_observations: List[Observation],
+    ) -> np.float64:
+        """
+        Compute the multi-agent information gain
+        :param current: The current node for which the multi-agent information gain is being computed
+        :param agent_bubbles: List of agents that the agent is within communication range including itself
+        :param planning_horizon: Planning horizon h
+        :param shared_observations: List of shared observations between the agents inside the communication range
+        """
+        g_val = np.float64(0.0)
+
+        agent_locations_history = {current.timestep: current.agent_locations}
+        ancestor = deepcopy(current.parent)
+        while ancestor is not None and ancestor.timestep != 0:
+            # Go till the nodes that are children of the root node. Locations of the root node are not required
+            agent_locations_history[ancestor.timestep] = ancestor.agent_locations
+            ancestor = ancestor.parent
+
+        abscissae, weights = np.polynomial.hermite.hermgauss(self.map.params.J)
+
+        for idx, agent in enumerate(agent_bubbles):
+
+            agent_observation_handle = deepcopy(shared_observations)
+            g_val = np.add(
+                g_val,
+                self.recursive_information_gain(
+                    agent,
+                    planning_horizon - current.timestep + 1,
+                    planning_horizon + 1,
+                    agent_locations_history,
+                    agent_observation_handle,
+                ),
+            )
+
+        return np.float64(0.0)
+
     def multi_agent_search(
         self,
         target_agent: Agent,
         agent_bubbles: List[Agent],
-        current_timestep: int,
         planning_horizon: int,
         shared_observations: List[Observation],
     ) -> Tuple[np.float64, Action]:
@@ -184,8 +372,7 @@ class Multi_Agent_Vulcan(object):
         in communication range of other agents
         :param target_agent: The agent for which the multi-agent search algorithm is being performed
         :param agent_bubbles: List of agents that the agent is within communication range including itself
-        :param current_timestep: Current timestep k
-        :param planning_horizon: Planning horizon k + h
+        :param planning_horizon: Planning horizon h
         :param shared_observations: List of shared observations between the agents inside the communication range
         """
 
@@ -193,23 +380,14 @@ class Multi_Agent_Vulcan(object):
         for agent in agent_bubbles:
             agent.map.map = self.map.map
 
-        root_node = MultiAgentSearchNode(
+        root_node = self.construct_node(
             None,
             {agent.id: [] for agent in agent_bubbles},
             {agent.id: agent.current_location for agent in agent_bubbles},
+            agent_bubbles,
+            planning_horizon,
+            shared_observations,
         )
-
-        # TODO: Probably not needed to compute the h-value for the root node
-        for agent_in_comm_range in agent_bubbles:
-            best_reward, best_action = agent_in_comm_range.extract_action(
-                agent_in_comm_range.current_location,
-                current_timestep,
-                current_timestep + planning_horizon,
-                shared_observations,
-            )
-            root_node.h = np.add(root_node.h, best_reward)
-
-        root_node.g = np.float64(0.0)
 
         open_set = queue.PriorityQueue()
         open_set.put(root_node)
@@ -254,26 +432,14 @@ class Multi_Agent_Vulcan(object):
                     if invalid_action_prefix:
                         continue
 
-                    child_node = MultiAgentSearchNode(
-                        current, action_prefixes, next_locations
+                    child_node = self.construct_node(
+                        current,
+                        action_prefixes,
+                        next_locations,
+                        agent_bubbles,
+                        planning_horizon,
+                        shared_observations,
                     )
-                    child_node.timestep = current.timestep + 1
-                    assert planning_horizon - child_node.timestep >= 0
-
-                    # Extract the g-val and h-val for these nodes!
-
-                    for agent_in_comm_range in agent_bubbles:
-                        best_reward, best_action = agent_in_comm_range.extract_action(
-                            agent_in_comm_range.current_location,
-                            child_node.timestep,
-                            planning_horizon - child_node.timestep,
-                            shared_observations,
-                        )
-                        child_node.h = np.add(child_node.h, best_reward)
-
-                    child_node.g = np.float64(
-                        0.0
-                    )  # Compute the combined multi-agent information gain
 
                     open_set.put(child_node)
 
