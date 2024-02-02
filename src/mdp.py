@@ -9,44 +9,20 @@ from map import Map, Observation, ActionType
 
 class MarkovDecisionProcess(object):
     def __init__(self, start: int, map: Map):
-        self.states = []
         self.observations = []
         self.actions = [action_type.value for action_type in ActionType]
 
         self.update(start, map)
 
-    def update(self, location: int, map: Map, unobserved_phenomenon: bool = False):
+    def update(self, location: int, map: Map):
         """
-        Updates the state that the agent is in
+        Updates the observations that the agent is getting
         :param location: Location that the agent is in now after executing an action
         :param map: Map object to query the underlying GP
         """
 
         observation = map.get_observation(location)
         self.observations.append(observation)
-
-        feature_probabilities = np.zeros(map.map_size)
-        feature_means, feature_covariances = self.measurement_function(
-            [location_id for location_id in range(map.map_size)], map, self.observations
-        )
-        feature_probabilities = np.random.multivariate_normal(
-            feature_means, feature_covariances
-        )
-
-        if len(self.states) == 0:
-            # We should not use unobserved phenonmenon probabilities for the first state
-            unobserved_phenomenon = False
-
-        phenomenon_probabilities = self.phenomenon_probability_function(
-            [location_id for location_id in range(map.map_size)],
-            map,
-            self.observations,
-            unobserved_phenomenon,
-        )
-
-        self.states.append(
-            [self.observations, feature_probabilities, phenomenon_probabilities]
-        )
 
     def measurement_function(
         self, location_ids: List[int], map: Map, observations: List[Observation]
@@ -159,23 +135,19 @@ class MarkovDecisionProcess(object):
         """
         Returns the phenomenon probability of existing at a set of locations (generally the whole grid) given a set of
         observations i.e p(x_i = 1 | y^{0:t}) - Equation 4.20
-        :param location_ids: List of locations to compute the phenomenon probability over
+        :param location_ids: List of locations to compute the phenomenon probability over i.e the future locations of
+               the agent l^{t+1:t+h}
         :param map: Map object to query the underlying GP
         :param observations: List of observations y^{0:t}
         """
         means, covariances = self.measurement_function(location_ids, map, observations)
 
         erf_quantity_numerator = (np.ones(means.shape[0]) * map.params.u_tilde) - means
-        erf_quantity_denominator = np.diag(
-            np.sqrt(2 * covariances)
-        )  # TODO: Should we be using diagonal entries only?
+        erf_quantity_denominator = np.sqrt(2 * covariances)
+        erf_term = erf(erf_quantity_numerator @ np.linalg.inv(erf_quantity_denominator))
 
-        high_probability_factors = (np.divide(map.params.P_1, 2)) * (
-            1.0 - erf(erf_quantity_numerator / erf_quantity_denominator)
-        )
-        low_probability_factors = (np.divide(map.params.P_2, 2)) * (
-            1.0 + erf(erf_quantity_numerator / erf_quantity_denominator)
-        )
+        high_probability_factors = (np.divide(map.params.P_1, 2)) * (1.0 - erf_term)
+        low_probability_factors = (np.divide(map.params.P_2, 2)) * (1.0 + erf_term)
         phenomenon_probabilities = high_probability_factors + low_probability_factors
 
         if unobserved_phenomenon:

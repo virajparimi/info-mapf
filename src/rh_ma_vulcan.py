@@ -146,9 +146,9 @@ class Multi_Agent_Vulcan(object):
                 self.map.update_agent_location(
                     agent_old_location, agent.current_location
                 )
-                agent.mdp_handle.update(agent.current_location, self.map, True)
+                agent.mdp_handle.update(agent.current_location, self.map)
                 agent.timer += 1
-                self.timer += 1
+            self.timer += 1
 
     def within_range_agents(self) -> List[List[Agent]]:
         """
@@ -365,7 +365,6 @@ class Multi_Agent_Vulcan(object):
             for index in range(self.map.params.J):
                 for f_timestep, f_measurement in agent_f_measurements.items():
                     agents_future_measurements[index].append(f_measurement[index])
-            # TODO: We have timestep, list of measurements for each index map. Need to convert it to index, list of measurements for each timestep and update the observations based on that. Keep collecting that same information for all the "past" agents and then repeat the process for the "future" agents
             g_val = np.add(g_val, future_g_val)
 
         return np.float64(0.0)

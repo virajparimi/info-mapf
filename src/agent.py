@@ -42,7 +42,7 @@ class Agent(object):
                 self.mdp_handle.observations,
             )
             self.current_location = self.execute_action(best_action)
-            self.mdp_handle.update(self.current_location, self.map, self.use_vulcan)
+            self.mdp_handle.update(self.current_location, self.map)
             self.timer += 1
 
     def extract_action(
@@ -74,12 +74,10 @@ class Agent(object):
             for index in range(self.map.params.J):
                 future_noisy_measurement = (
                     abscissae[index]
-                    * np.diag(
-                        np.sqrt(2 * future_measurement_covariance)
-                    )  # TODO: Do we need extract the diagnoal entries here?
+                    * np.linalg.inv(np.sqrt(2 * future_measurement_covariance))
                     + future_measurement_mean
                 )
-                future_noisy_measurement = future_noisy_measurement[0]
+                future_noisy_measurement = future_noisy_measurement[0][0]
 
                 # y_{0:k+1}
                 future_observations = observations.copy()
