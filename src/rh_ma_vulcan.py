@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import queue
 import numpy as np
+import itertools as iter
 from copy import deepcopy
 from map import Map, ActionType
 from scipy.special import kl_div
@@ -22,42 +23,44 @@ class MultiAgentSearchNode(object):
         self.action_prefixes = agents_actions
         self.agent_locations = agent_locations
 
-        self.f = 0.0
+        self._g = np.float64(0.0)
+        self._h = np.float64(0.0)
+        self._f = np.add(self._g, self._h)
 
     @property
     def g(self):
         # Combined multi-agent information gain - true estimate
-        return self.g
+        return self._g
 
     @property
     def h(self):
         # Sum of single-agent information gain - heuristic estimate
-        return self.h
+        return self._h
 
     @g.setter
     def g(self, value: np.float64):
-        self.g = value
-        self.f = np.add(self.g, self.h)
+        self._g = value
+        self._f = np.add(self._g, self._h)
 
     @h.setter
     def h(self, value: np.float64):
-        self.h = value
-        self.f = np.add(self.g, self.h)
+        self._h = value
+        self._f = np.add(self._g, self._h)
 
     def __repr__(self):
         return (
             f"Multi-Agent SearchNode Summary:\n\tAgent Action Prefixes: {self.action_prefixes}"
-            f"\n\tG-val (Multi-Agent Information Gain): {self.g}"
-            f"\n\tH-val (Sum of Single-Agent Information Gain: {self.h}"
+            f"\n\tG-val (Multi-Agent Information Gain): {self._g}"
+            f"\n\tH-val (Sum of Single-Agent Information Gain: {self._h}"
         )
 
     # Defining less than for purposes of heap queue
     def __lt__(self, other):
-        return self.f > other.f
+        return self._f > other._f
 
     # Defining greater than for purposes of heap queue
     def __gt__(self, other):
-        return self.f < other.f
+        return self._f < other._f
 
     def extract_action_prefix_extensions(
         self, agent_actions: Union[List[str], None] = None
@@ -81,7 +84,7 @@ class MultiAgentSearchNode(object):
         return extensions
 
 
-class Multi_Agent_Vulcan(object):
+class MultiAgentVulcan(object):
     def __init__(self, map: Map, agents: List[Agent], communication_range: int = 5):
         self.timer = 0
         self.map = map
@@ -97,7 +100,7 @@ class Multi_Agent_Vulcan(object):
             agent_bubbles = self.within_range_agents()
             # Command each agent to execute their adaptive search algorithm for one step
             for idx, agent in enumerate(self.agents):
-                if len(agent_bubbles[idx]) > 0:
+                if len(agent_bubbles[idx]) > 1:
                     # Start multi-agent search algorithm with respect to this agent
                     shared_observations = []
                     for agent_in_comm_range in agent_bubbles[idx]:
@@ -107,6 +110,7 @@ class Multi_Agent_Vulcan(object):
                     shared_observations = list(
                         set(shared_observations)
                     )  # ensure uniqueness of the observations
+                    # TODO: Which measurement should we use for the locations that are common among these agents?
 
                     horizon = min(
                         agent.planning_horizon, agent.mission_duration - self.timer
@@ -116,7 +120,6 @@ class Multi_Agent_Vulcan(object):
                         agent_in_comm_range.mdp_handle.observations = (
                             shared_observations
                         )
-                        # States of the MDP handle are not updated here as I dont think we need to
 
                     _, best_action = self.multi_agent_search(
                         agent,
@@ -141,11 +144,11 @@ class Multi_Agent_Vulcan(object):
 
             # Once we have extracted the best actions for each agent, we execute them
             for agent in self.agents:
-                agent_old_location = deepcopy(agent.current_location)
+                # agent_old_location = deepcopy(agent.current_location)
                 agent.current_location = agent.execute_action(agent_actions[agent.id])
-                self.map.update_agent_location(
-                    agent_old_location, agent.current_location
-                )
+                # self.map.update_agent_location(
+                #     agent_old_location, agent.current_location
+                # )
                 agent.mdp_handle.update(agent.current_location, self.map)
                 agent.timer += 1
             self.timer += 1
@@ -323,7 +326,7 @@ class Multi_Agent_Vulcan(object):
                 )
                 for f_timestep, f_measurement in future_measurements.items():
                     measurements[f_timestep] = f_measurement
-                g_val = np.add(g_val, future_g_val)
+                g_val += future_g_val
 
         return g_val, measurements
 
@@ -385,10 +388,6 @@ class Multi_Agent_Vulcan(object):
         :param shared_observations: List of shared observations between the agents inside the communication range
         """
 
-        # Make the maps of the agents in the bubble consistent with each other
-        for agent in agent_bubbles:
-            agent.map.map = self.map.map
-
         root_node = self.construct_node(
             None,
             {agent.id: [] for agent in agent_bubbles},
@@ -407,7 +406,7 @@ class Multi_Agent_Vulcan(object):
         while not open_set.empty():
             current = open_set.get()
 
-            if current.f < best_gain:
+            if current._f < best_gain:
                 return best_gain, best_action
 
             if current.timestep >= planning_horizon:
@@ -415,7 +414,7 @@ class Multi_Agent_Vulcan(object):
 
                 if current.g > best_gain:
                     best_gain = current.g
-                    best_action = current.action_prefixes[0]
+                    best_action = current.action_prefixes[target_agent.id][0]
                     self.update_min_costs(
                         current, best_gain
                     )  # TODO: Check the logic here again!

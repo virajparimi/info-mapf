@@ -5,10 +5,27 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python: Current File",
-            "type": "python",
+            "name": "Vulcan",
+            "type": "debugpy",
             "request": "launch",
-            "program": "${file}",
+            "program": "${workspaceFolder}/test/test_vulcan.py",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "args": [
+                "--type",
+                "multi-large",
+                "--measurement_noise",
+                "0.2"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "RH-MA-Vulcan",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/test/test_rh_ma_vulcan.py",
             "env": {
                 "PYTHONPATH": "${workspaceFolder}"
             },
@@ -23,7 +40,7 @@
         },
         {
             "name": "Python: Current File with Profiler",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "module": "cProfile",
             "args": [

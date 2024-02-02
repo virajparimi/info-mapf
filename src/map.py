@@ -18,6 +18,11 @@ class Observation:
     location: int  # l
     measurement: np.float64  # y
 
+    def __hash__(self) -> int:
+        return hash(
+            self.location
+        )  # Hash the location since that is the unique identifier for an observation
+
 
 @dataclass
 class Action:
@@ -153,8 +158,7 @@ class Map(object):
         if (
             next < 0
             or next >= self.map_size
-            or current == next
-            or not self.map[next_location[0], next_location[1]]
+            or (not self.map[next_location[0], next_location[1]] and current != next)
         ):
             return False
         return self.get_manhattan_distance(current, next) < 2
@@ -186,7 +190,7 @@ class Map(object):
         next = None
         if action == "Wait":
             next = current
-        if action == "Right":
+        elif action == "Right":
             next = current + 1
         elif action == "Left":
             next = current - 1
@@ -207,7 +211,8 @@ class Map(object):
         """
 
         next_location = self.get_coordinate(next)
-        assert self.map[next_location[0], next_location[1]]
+        if current != next:
+            assert self.map[next_location[0], next_location[1]]
         current_location = self.get_coordinate(current)
         self.map[current_location[0], current_location[1]] = True
         self.map[next_location[0], next_location[1]] = False
