@@ -95,7 +95,7 @@ class MultiAgentVulcan(object):
     def planner(self):
         while self.timer < self.mission_duration:
             print("Time = ", self.timer)
-            agent_actions = []
+            agent_actions = {}
             # Collect agents within communication range
             agent_bubbles = self.within_range_agents()
             # Command each agent to execute their adaptive search algorithm for one step
@@ -141,7 +141,7 @@ class MultiAgentVulcan(object):
                         deepcopy(agent.map),
                     )
 
-                agent_actions.append(best_action)
+                agent_actions[agent.id] = best_action
 
             # Once we have extracted the best actions for each agent, we execute them
             for agent in self.agents:
@@ -203,6 +203,8 @@ class MultiAgentVulcan(object):
             node.h = np.float64(0.0)
         else:
 
+            # TODO: Do we need to take into account the current observations of the agents?
+            # i.e the random variable corresponding to current timestep
             recursive_map_object = deepcopy(
                 agent_bubbles[0].map
             )  # Take any agent's map
@@ -283,9 +285,7 @@ class MultiAgentVulcan(object):
                     ),  # TODO: Should we be using theta_1 or theta_2 here?
                 )
             else:
-                locations_to_consider = [
-                    location_id for location_id in range(self.map.map_size)
-                ]
+                locations_to_consider = np.arange(self.map.map_size).tolist()
 
             # p(x_i | y_{0:k})
             current_phenomenon_probabilities = (
@@ -386,7 +386,7 @@ class MultiAgentVulcan(object):
                     agents_future_measurements[index].append(f_measurement[index])
             g_val = np.add(g_val, future_g_val)
 
-        return np.float64(0.0)
+        return g_val
 
     def multi_agent_search(
         self,
@@ -430,40 +430,69 @@ class MultiAgentVulcan(object):
 
                 if current.g > best_gain:
                     best_gain = current.g
-                    best_action = current.action_prefixes[target_agent.id][0]
+                    best_action_str = current.action_prefixes[target_agent.id][0]
+                    best_action_location = target_agent.map.extract_next_location(
+                        target_agent.current_location, best_action_str
+                    )
+                    best_action = Action(best_action_str, best_action_location)
                     self.update_min_costs(
                         current, best_gain
                     )  # TODO: Check the logic here again!
             else:
                 action_prefix_extensions = current.extract_action_prefix_extensions()
                 for action_prefixes in action_prefix_extensions:
-                    next_locations = {}
+                    prefix_paths = np.zeros(
+                        (len(agent_bubbles), len(action_prefixes[target_agent.id]) + 1),
+                        dtype=int,
+                    )
+                    current_locations = [
+                        current.agent_locations[agent.id] for agent in agent_bubbles
+                    ]
+                    prefix_paths[:, 0] = current_locations
+
                     # Validate whether the action prefix can be executed
                     invalid_action_prefix = False
-                    for agent_in_comm_range in agent_bubbles:
-                        next_pos = agent_in_comm_range.map.extract_next_location(
-                            current.agent_locations[agent_in_comm_range.id],
-                            action_prefixes[agent_in_comm_range.id][-1],
-                        )
-                        if not next_pos:
-                            invalid_action_prefix = True
-                            break
-
-                        next_locations[agent_in_comm_range.id] = next_pos
-                        if not agent_in_comm_range.map.valid_move(
-                            current.agent_locations[agent_in_comm_range.id], next_pos
+                    for agent_idx, agent_in_comm_range in enumerate(agent_bubbles):
+                        for action_idx, action in enumerate(
+                            action_prefixes[agent_in_comm_range.id]
                         ):
-                            invalid_action_prefix = True
+                            next_pos = agent_in_comm_range.map.extract_next_location(
+                                prefix_paths[agent_idx][action_idx],
+                                action,
+                            )
+
+                            if not next_pos or not agent_in_comm_range.map.valid_move(
+                                prefix_paths[agent_idx][action_idx],
+                                next_pos,
+                            ):
+                                invalid_action_prefix = True
+                                break
+
+                            prefix_paths[agent_idx][action_idx + 1] = next_pos
+
+                        if invalid_action_prefix:
                             break
 
                     """
                     If the action prefix is invalid or the next locations are not unique i.e imminent collision,
                     we skip this action prefix
                     """
-                    if invalid_action_prefix or len(next_locations.values()) != len(
-                        set(next_locations.values())
-                    ):
+
+                    for action_idx in range(len(action_prefixes[target_agent.id]) + 1):
+                        if prefix_paths[:, action_idx].size != len(
+                            np.unique(prefix_paths[:, action_idx])
+                        ):
+                            invalid_action_prefix = True
+                            break
+
+                    if invalid_action_prefix:
                         continue
+
+                    next_locations = {}
+                    for agent_idx, agent_in_comm_range in enumerate(agent_bubbles):
+                        next_locations[agent_in_comm_range.id] = prefix_paths[
+                            agent_idx, len(action_prefixes[target_agent.id])
+                        ]
 
                     child_node = self.construct_node(
                         current,
@@ -476,4 +505,4 @@ class MultiAgentVulcan(object):
 
                     open_set.put(child_node)
 
-        return best_gain, None
+        return best_gain, best_action

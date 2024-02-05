@@ -26,6 +26,7 @@ class Agent(object):
         self.current_location = start_location
         self.mission_duration = mission_duration
         self.planning_horizon = planning_horizon
+        self.visited_locations = [start_location]
         self.mdp_handle = MarkovDecisionProcess(start_location, self.map)
 
     def adaptive_search(self):
@@ -190,4 +191,5 @@ class Agent(object):
         """
         _, action_location = action.action_type, action.location
         self.map.update_agent_location(self.current_location, action_location)
+        self.visited_locations.append(action_location)
         return action_location

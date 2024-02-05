@@ -44,10 +44,7 @@ def get_nearest_locations(
         location_coords[:, np.newaxis, :] - location_id_coords, axis=2
     )
     indices = np.any(distances <= radius, axis=1)
-    linear_locations = np.arange(map.map_size)
-    return list(
-        set(linear_locations[i] for i in range(len(linear_locations)) if indices[i])
-    )
+    return locations[indices.astype(np.bool_)].tolist()
 
 
 def generate_map(

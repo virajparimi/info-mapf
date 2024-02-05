@@ -121,9 +121,8 @@ if __name__ == "__main__":
     for idx, agent in enumerate(vulcan_agents):
         print("Path for agent ", agent.id)
         vulcan_path = []
-        for observation in agent.mdp_handle.observations:
-            location = observation.location
-            vulcan_path.append(map.get_coordinate(location))
+        for v_location in agent.visited_locations:
+            vulcan_path.append(map.get_coordinate(v_location))
         print(vulcan_path)
         plt.plot(
             [x[1] for x in vulcan_path],
