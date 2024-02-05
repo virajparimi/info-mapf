@@ -138,6 +138,7 @@ class MultiAgentVulcan(object):
                         self.timer,
                         self.timer + horizon,
                         agent.mdp_handle.observations,
+                        deepcopy(agent.map),
                     )
 
                 agent_actions.append(best_action)
@@ -201,12 +202,26 @@ class MultiAgentVulcan(object):
         if node.timestep >= planning_horizon:
             node.h = np.float64(0.0)
         else:
+
+            recursive_map_object = deepcopy(
+                agent_bubbles[0].map
+            )  # Take any agent's map
+            # Update the locations of the agents in the map as its required for updated valid neighbor computation
+            for other_agent in agent_bubbles:
+                if node.parent is not None:
+                    recursive_map_object.update_agent_location(
+                        node.parent.agent_locations[other_agent.id],
+                        node.agent_locations[other_agent.id],
+                    )
+
             for agent_in_comm_range in agent_bubbles:
+
                 best_reward, _ = agent_in_comm_range.extract_action(
-                    agent_in_comm_range.current_location,
+                    agent_locations[agent_in_comm_range.id],
                     node.timestep,
                     planning_horizon - node.timestep,
                     shared_observations,
+                    recursive_map_object,
                 )
                 node.h = np.add(node.h, best_reward)
 
@@ -241,20 +256,18 @@ class MultiAgentVulcan(object):
                 future_measurement_mean,
                 future_measurement_covariance,
             ) = agent.mdp_handle.noisy_measurement_function(
-                [agent_location], agent.map, observations
+                [agent_location], agent.map, indexed_observations
             )
 
             future_noisy_measurement = (
                 abscissae[index]
-                * np.diag(
-                    np.sqrt(2 * future_measurement_covariance)
-                )  # TODO: Do we need extract the diagnoal entries here?
+                * np.linalg.inv(np.sqrt(2 * future_measurement_covariance))
                 + future_measurement_mean
             )
-            future_noisy_measurement = future_noisy_measurement[0]
+            future_noisy_measurement = future_noisy_measurement[0][0]
 
             # y_{0:k+1}
-            future_observations = observations.copy()
+            future_observations = indexed_observations.copy()
             new_observation = Observation(agent_location, future_noisy_measurement)
             future_observations.append(new_observation)
             measurements[current_timestep].append(new_observation)
@@ -279,7 +292,7 @@ class MultiAgentVulcan(object):
                 agent.mdp_handle.phenomenon_probability_function(
                     locations_to_consider,
                     self.map,
-                    observations,
+                    indexed_observations,
                     unobserved_phenomenon=False,
                 )
             )
@@ -354,12 +367,15 @@ class MultiAgentVulcan(object):
             ancestor = ancestor.parent
 
         agents_future_measurements = {index: [] for index in range(self.map.params.J)}
+
+        assert current.parent is not None
+
         for idx, agent in enumerate(agent_bubbles):
             agent_observation_handle = deepcopy(shared_observations)
             future_g_val, agent_f_measurements = self.recursive_information_gain(
                 agent,
-                planning_horizon - current.timestep + 1,
-                planning_horizon + 1,
+                1,
+                planning_horizon + current.timestep - 1,
                 agent_locations_history,
                 agent_observation_handle,
                 agents_future_measurements,
@@ -429,6 +445,10 @@ class MultiAgentVulcan(object):
                             current.agent_locations[agent_in_comm_range.id],
                             action_prefixes[agent_in_comm_range.id][-1],
                         )
+                        if not next_pos:
+                            invalid_action_prefix = True
+                            break
+
                         next_locations[agent_in_comm_range.id] = next_pos
                         if not agent_in_comm_range.map.valid_move(
                             current.agent_locations[agent_in_comm_range.id], next_pos
@@ -436,7 +456,13 @@ class MultiAgentVulcan(object):
                             invalid_action_prefix = True
                             break
 
-                    if invalid_action_prefix:
+                    """
+                    If the action prefix is invalid or the next locations are not unique i.e imminent collision,
+                    we skip this action prefix
+                    """
+                    if invalid_action_prefix or len(next_locations.values()) != len(
+                        set(next_locations.values())
+                    ):
                         continue
 
                     child_node = self.construct_node(

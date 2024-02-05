@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import numpy as np
 from enum import Enum
 from typing import List, Union
@@ -22,6 +24,9 @@ class Observation:
         return hash(
             self.location
         )  # Hash the location since that is the unique identifier for an observation
+
+    def __eq__(self, other: Observation) -> bool:
+        return self.location == other.location
 
 
 @dataclass
@@ -170,7 +175,6 @@ class Map(object):
         """
         neighbors = []
         candidates = [
-            Action(ActionType.Wait, current),
             Action(ActionType.Right, current + 1),
             Action(ActionType.Left, current - 1),
             Action(ActionType.Down, current + self.num_of_cols),
@@ -179,6 +183,8 @@ class Map(object):
         for next in candidates:
             if self.valid_move(current, next.location):
                 neighbors.append(next)
+        if len(neighbors) == 0:
+            neighbors.append(Action(ActionType.Wait, current))
         return neighbors
 
     def extract_next_location(self, current: int, action: str) -> Union[int, bool]:

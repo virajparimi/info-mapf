@@ -150,19 +150,21 @@ class Agent(object):
                 if current_timestep + 1 < planning_horizon:
 
                     recursive_map_object = deepcopy(map_object)
-
-                    current_location_coord = recursive_map_object.get_coordinate(
-                        current_location
+                    recursive_map_object.update_agent_location(
+                        current_location, next_location
                     )
-                    next_location_coord = recursive_map_object.get_coordinate(
-                        next_location
-                    )
-                    recursive_map_object.map[
-                        current_location_coord[0], current_location_coord[1]
-                    ] = True
-                    recursive_map_object.map[
-                        next_location_coord[0], next_location_coord[1]
-                    ] = False
+                    # current_location_coord = recursive_map_object.get_coordinate(
+                    #     current_location
+                    # )
+                    # next_location_coord = recursive_map_object.get_coordinate(
+                    #     next_location
+                    # )
+                    # recursive_map_object.map[
+                    #     current_location_coord[0], current_location_coord[1]
+                    # ] = True
+                    # recursive_map_object.map[
+                    #     next_location_coord[0], next_location_coord[1]
+                    # ] = False
 
                     next_action_reward, _ = self.extract_action(
                         next_location,
