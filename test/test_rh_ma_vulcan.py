@@ -134,3 +134,34 @@ if __name__ == "__main__":
 
     plt.imshow(map.grid, cmap="hot")
     plt.savefig(figures_base_path + "rh-ma-vulcan-" + args.type + ".png")
+
+    vulcan_map = deepcopy(map)
+    vulcan_agents = []
+    for agent in range(len(agent_locations)):
+        agent_location_linearized = vulcan_map.linearize_coordinate(
+            agent_locations[agent][0], agent_locations[agent][1]
+        )
+        vulcan_agent = Agent(
+            id=agent,
+            start_location=agent_location_linearized,
+            map=vulcan_map,
+            mission_duration=mission_duration,
+        )
+        vulcan_agents.append(vulcan_agent)
+
+    for idx, agent in enumerate(vulcan_agents):
+        agent.adaptive_search()
+        vulcan_path = []
+        for v_location in agent.visited_locations:
+            vulcan_path.append(map.get_coordinate(v_location))
+        print("Vulcan Path")
+        print(vulcan_path)
+
+        plt.plot(
+            [x[1] for x in vulcan_path],
+            [x[0] for x in vulcan_path],
+            agent_colors[idx] + "--",
+            alpha=0.7,
+        )
+        plt.imshow(map.grid, cmap="hot")
+        plt.savefig(figures_base_path + "sa-vulcan-" + args.type + ".png")
