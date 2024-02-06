@@ -20,11 +20,6 @@ from rh_ma_vulcan import MultiAgentVulcan  # NOQA
 
 def visualize_path(paths: List[List[NDArray[np.int64]]], map: Map, filename: str):
     fig, ax = plt.subplots()
-    map_limits = [0, map.num_of_rows, 0, map.num_of_cols]
-    ax.set_xlim(map_limits[0], map_limits[1])
-    ax.set_ylim(map_limits[2], map_limits[3])
-    ax.set_xticks([])
-    ax.set_yticks([])
     ax.imshow(map.grid, cmap="hot")
 
     agent_colors = "rbgkymc"
@@ -32,7 +27,7 @@ def visualize_path(paths: List[List[NDArray[np.int64]]], map: Map, filename: str
 
     lines = []
     for agent in range(num_of_agents):
-        (line,) = ax.plot([], [], lw=2, color=agent_colors[agent], alpha=0.7)
+        (line,) = ax.plot([], [], lw=2, color=agent_colors[agent], ls="--", alpha=0.7)
         lines.append(line)
 
     def init():
