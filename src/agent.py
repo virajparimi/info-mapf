@@ -29,6 +29,12 @@ class Agent(object):
         self.visited_locations = [start_location]
         self.mdp_handle = MarkovDecisionProcess(start_location, self.map)
 
+    def __eq__(self, __value: Agent) -> bool:
+        return self.id == __value.id
+
+    def __hash__(self) -> int:
+        return hash(self.id)
+
     def adaptive_search(self):
         """
         Performs the regular Vulcan adaptive search algorithm for a single agent assuming they are
@@ -44,7 +50,6 @@ class Agent(object):
                 self.mdp_handle.observations,
                 deepcopy(self.map),
             )
-            print(best_action)
             self.current_location = self.execute_action(best_action)
             self.mdp_handle.update(self.current_location, self.map)
             self.timer += 1

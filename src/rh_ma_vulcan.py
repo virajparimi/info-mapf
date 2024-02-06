@@ -22,6 +22,7 @@ class MultiAgentSearchNode(object):
         self.parent = parent
         self.action_prefixes = agents_actions
         self.agent_locations = agent_locations
+        self.cached_h_values = {agent: {} for agent in agent_locations.keys()}
 
         self._g = np.float64(0.0)
         self._h = np.float64(0.0)
@@ -99,8 +100,12 @@ class MultiAgentVulcan(object):
             # Collect agents within communication range
             agent_bubbles = self.within_range_agents()
             # Command each agent to execute their adaptive search algorithm for one step
+
+            skip_agent = {agent.id: False for agent in self.agents}
             for idx, agent in enumerate(self.agents):
-                if len(agent_bubbles[idx]) > 1:
+                if (
+                    idx in agent_bubbles.keys() and len(agent_bubbles[idx]) > 1
+                ):  # uniqueness of the agent bubbles is required here!
                     # Start multi-agent search algorithm with respect to this agent
                     shared_observations = []
                     for agent_in_comm_range in agent_bubbles[idx]:
@@ -127,8 +132,22 @@ class MultiAgentVulcan(object):
                         horizon,
                         shared_observations,
                     )
+
                     assert best_action is not None
-                else:
+
+                    for agent_in_comm_range in agent_bubbles[idx]:
+                        if agent.id == agent_in_comm_range.id:
+                            agent_actions[agent_in_comm_range.id] = best_action[
+                                agent_in_comm_range.id
+                            ]
+                        else:
+                            if agent_in_comm_range.id not in agent_bubbles.keys():
+                                agent_actions[agent_in_comm_range.id] = best_action[
+                                    agent_in_comm_range.id
+                                ]
+                                skip_agent[agent_in_comm_range.id] = True
+
+                elif not skip_agent[agent.id]:
                     # Re-use vulcan for this single agent
                     horizon = min(
                         agent.planning_horizon, agent.mission_duration - self.timer
@@ -141,7 +160,9 @@ class MultiAgentVulcan(object):
                         deepcopy(agent.map),
                     )
 
-                agent_actions[agent.id] = best_action
+                    agent_actions[agent.id] = best_action
+
+            assert len(agent_actions) == len(self.agents)
 
             # Once we have extracted the best actions for each agent, we execute them
             for agent in self.agents:
@@ -154,7 +175,7 @@ class MultiAgentVulcan(object):
                 agent.timer += 1
             self.timer += 1
 
-    def within_range_agents(self) -> List[List[Agent]]:
+    def within_range_agents(self) -> Dict[int, List[Agent]]:
         """
         Returns a list of agents within communication range
         """
@@ -170,7 +191,19 @@ class MultiAgentVulcan(object):
                     < self.communication_range
                 ):
                     agent_bubbles[agent_i.id].append(agent_j)
-        return agent_bubbles
+
+            agent_bubbles[agent_i.id] = sorted(
+                agent_bubbles[agent_i.id], key=lambda x: x.id
+            )
+
+        unique_agent_bubbles = []
+        mapped_agent_bubbles = {}
+        for agent_idx, agent_bubble in enumerate(agent_bubbles):
+            if agent_bubble not in unique_agent_bubbles:
+                unique_agent_bubbles.append(agent_bubble)
+                mapped_agent_bubbles[agent_idx] = agent_bubble
+
+        return mapped_agent_bubbles
 
     def update_min_costs(self, node: MultiAgentSearchNode, reward: np.float64):
         node.g = reward
@@ -218,14 +251,30 @@ class MultiAgentVulcan(object):
 
             for agent_in_comm_range in agent_bubbles:
 
-                best_reward, _ = agent_in_comm_range.extract_action(
-                    agent_locations[agent_in_comm_range.id],
-                    node.timestep,
-                    planning_horizon - node.timestep,
-                    shared_observations,
-                    recursive_map_object,
-                )
-                node.h = np.add(node.h, best_reward)
+                dict_key = str(node.action_prefixes[agent_in_comm_range.id])
+                if (
+                    node.parent is not None
+                    and dict_key in node.parent.cached_h_values[agent_in_comm_range.id]
+                ):
+                    node.h = np.add(
+                        node.h,
+                        node.parent.cached_h_values[agent_in_comm_range.id][dict_key],
+                    )
+                else:
+                    best_reward, _ = agent_in_comm_range.extract_action(
+                        agent_locations[agent_in_comm_range.id],
+                        node.timestep,
+                        planning_horizon - node.timestep,
+                        shared_observations,
+                        recursive_map_object,
+                    )
+
+                    if node.parent is not None:
+                        node.parent.cached_h_values[agent_in_comm_range.id].update(
+                            {dict_key: best_reward}
+                        )
+
+                    node.h = np.add(node.h, best_reward)
 
         if parent is None:
             node.g = np.float64(0.0)
@@ -394,7 +443,7 @@ class MultiAgentVulcan(object):
         agent_bubbles: List[Agent],
         planning_horizon: int,
         shared_observations: List[Observation],
-    ) -> Tuple[np.float64, Union[Action, None]]:
+    ) -> Tuple[np.float64, Union[List[Action], None]]:
         """
         Performs the multi-agent search algorithm for a single agent assuming they are
         in communication range of other agents
@@ -417,7 +466,9 @@ class MultiAgentVulcan(object):
         open_set.put(root_node)
 
         best_gain = np.float64(0.0)
-        best_action = Action(ActionType.Wait, target_agent.current_location)
+        best_action = [
+            Action(ActionType.Wait, agent.current_location) for agent in agent_bubbles
+        ]
 
         while not open_set.empty():
             current = open_set.get()
@@ -430,11 +481,19 @@ class MultiAgentVulcan(object):
 
                 if current.g > best_gain:
                     best_gain = current.g
-                    best_action_str = current.action_prefixes[target_agent.id][0]
-                    best_action_location = target_agent.map.extract_next_location(
-                        target_agent.current_location, best_action_str
-                    )
-                    best_action = Action(best_action_str, best_action_location)
+                    best_action = []
+                    for agent_in_comm_range in agent_bubbles:
+                        best_action_str = current.action_prefixes[
+                            agent_in_comm_range.id
+                        ][0]
+                        best_action_location = (
+                            agent_in_comm_range.map.extract_next_location(
+                                agent_in_comm_range.current_location, best_action_str
+                            )
+                        )
+                        best_action.append(
+                            Action(best_action_str, best_action_location)
+                        )
                     self.update_min_costs(
                         current, best_gain
                     )  # TODO: Check the logic here again!
