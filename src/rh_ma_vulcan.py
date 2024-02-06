@@ -532,11 +532,12 @@ class MultiAgentVulcan(object):
                         if invalid_action_prefix:
                             break
 
+                    if invalid_action_prefix:
+                        continue
                     """
                     If the action prefix is invalid or the next locations are not unique i.e imminent collision,
                     we skip this action prefix
                     """
-
                     for action_idx in range(len(action_prefixes[target_agent.id]) + 1):
                         if prefix_paths[:, action_idx].size != len(
                             np.unique(prefix_paths[:, action_idx])

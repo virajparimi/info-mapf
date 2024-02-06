@@ -4,9 +4,11 @@ import numpy as np
 from copy import deepcopy
 from cProfile import Profile
 from typing import List, Tuple
+from numpy.typing import NDArray
 from pstats import SortKey, Stats
 from argparse import ArgumentParser
 from matplotlib import pyplot as plt
+from matplotlib.animation import FuncAnimation
 
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(__file__)), "src"))
 
@@ -14,6 +16,40 @@ from agent import Agent  # NOQA
 from utils import generate_map  # NOQA
 from map import Map, Parameters  # NOQA
 from rh_ma_vulcan import MultiAgentVulcan  # NOQA
+
+
+def visualize_path(paths: List[List[NDArray[np.int64]]], map: Map):
+    fig, ax = plt.subplots()
+    map_limits = [0, map.num_of_rows, 0, map.num_of_cols]
+    ax.set_xlim(map_limits[0], map_limits[1])
+    ax.set_ylim(map_limits[2], map_limits[3])
+
+    agent_colors = "rbgkymc"
+    num_of_agents = len(paths)
+
+    lines = []
+    for agent in range(num_of_agents):
+        (line,) = ax.plot([], [], lw=2, color=agent_colors[agent], alpha=0.7)
+        lines.append(line)
+
+    def init():
+        for line in lines:
+            line.set_data([], [])
+        return lines
+
+    def update(frame):
+        for i, path in enumerate(paths):
+            x_data = [point[0] for point in path[: frame + 1]]
+            y_data = [point[1] for point in path[: frame + 1]]
+            lines[i].set_data(x_data, y_data)
+        return lines
+
+    frames = max(len(path) for path in paths)
+    _ = FuncAnimation(fig, update, frames=frames, init_func=init, blit=True)
+
+    plt.imshow(map.grid, cmap="hot")
+    plt.show()
+
 
 if __name__ == "__main__":
     figures_base_path = (
@@ -135,6 +171,8 @@ if __name__ == "__main__":
     plt.imshow(map.grid, cmap="hot")
     plt.savefig(figures_base_path + "rh-ma-vulcan-" + args.type + ".png")
 
+    visualize_path(vulcan_agents_paths, map)
+
     vulcan_map = deepcopy(map)
     vulcan_agents = []
     for agent in range(len(agent_locations)):
@@ -149,6 +187,7 @@ if __name__ == "__main__":
         )
         vulcan_agents.append(vulcan_agent)
 
+    vulcan_agents_paths = []
     for idx, agent in enumerate(vulcan_agents):
         agent.adaptive_search()
         vulcan_path = []
@@ -163,5 +202,9 @@ if __name__ == "__main__":
             agent_colors[idx] + "--",
             alpha=0.7,
         )
-        plt.imshow(map.grid, cmap="hot")
-        plt.savefig(figures_base_path + "sa-vulcan-" + args.type + ".png")
+        vulcan_agents_paths.append(vulcan_path)
+
+    plt.imshow(map.grid, cmap="hot")
+    plt.savefig(figures_base_path + "sa-vulcan-" + args.type + ".png")
+
+    visualize_path(vulcan_agents_paths, map)
