@@ -135,6 +135,9 @@ class MultiAgentVulcan(object):
                         shared_observations,
                     )
 
+                    print("Total children created for this search: ", self.children)
+                    self.children = 0
+
                     assert best_action is not None
 
                     for agent_in_comm_range in agent_bubbles[idx]:
@@ -177,8 +180,6 @@ class MultiAgentVulcan(object):
                 agent.timer += 1
             self.timer += 1
 
-        print("Total children created: ", self.children)
-
     def within_range_agents(self) -> Dict[int, List[Agent]]:
         """
         Returns a list of agents within communication range
@@ -211,7 +212,7 @@ class MultiAgentVulcan(object):
 
     def update_min_costs(self, node: MultiAgentSearchNode, reward: np.float64):
         node.g = reward
-        if node.parent is not None:
+        if node.parent is not None and np.less(node.parent.g, reward):
             self.update_min_costs(node.parent, reward)
 
     def construct_node(
@@ -298,6 +299,7 @@ class MultiAgentVulcan(object):
         agent_locations_history: Dict[int, Dict[int, int]],
         observations: List[Observation],
         agents_future_measurements: Dict[int, List[Observation]],
+        use_vulcan: bool = True,
     ) -> Tuple[np.float64, Dict[int, List[Observation]]]:
         g_val = np.float64(0.0)
         measurements = {current_timestep: []}
@@ -357,7 +359,7 @@ class MultiAgentVulcan(object):
                     locations_to_consider,
                     self.map,
                     future_observations,
-                    unobserved_phenomenon=agent.use_vulcan,
+                    unobserved_phenomenon=use_vulcan,
                 )
             )
 
@@ -425,7 +427,10 @@ class MultiAgentVulcan(object):
         assert current.parent is not None
 
         for idx, agent in enumerate(agent_bubbles):
+            use_vulcan = deepcopy(agent.use_vulcan)
             agent_observation_handle = deepcopy(shared_observations)
+            # if ActionType.Wait.value in current.action_prefixes[agent.id]:
+            #     use_vulcan = False
             future_g_val, agent_f_measurements = self.recursive_information_gain(
                 agent,
                 1,
@@ -433,6 +438,7 @@ class MultiAgentVulcan(object):
                 agent_locations_history,
                 agent_observation_handle,
                 agents_future_measurements,
+                use_vulcan,
             )
 
             for index in range(self.map.params.J):
@@ -471,20 +477,28 @@ class MultiAgentVulcan(object):
         open_set.put(root_node)
 
         best_gain = np.float64(0.0)
-        best_action = [
-            Action(ActionType.Wait, agent.current_location) for agent in agent_bubbles
-        ]
+        # best_action = [
+        #     Action(ActionType.Wait, agent.current_location) for agent in agent_bubbles
+        # ]
+        best_action = None
 
         while not open_set.empty():
             current = open_set.get()
 
             if current._f < best_gain:
+                print("Size of open set: ", open_set.qsize())
                 return best_gain, best_action
 
             if current.timestep >= planning_horizon:
                 # We have reached our planning horizon
 
-                if current.g > best_gain:
+                print("Current is a leaf!")
+                if current.parent is not None:
+                    self.update_min_costs(
+                        current.parent, current.g
+                    )  # TODO: Check the logic here again!
+
+                if current.g >= best_gain:
                     best_gain = current.g
                     best_action = []
                     for agent_in_comm_range in agent_bubbles:
@@ -499,10 +513,11 @@ class MultiAgentVulcan(object):
                         best_action.append(
                             Action(best_action_str, best_action_location)
                         )
-                    self.update_min_costs(
-                        current, best_gain
-                    )  # TODO: Check the logic here again!
             else:
+                print("Current is not a leaf!")
+
+                if current.g < best_gain:
+                    continue
                 action_prefix_extensions = current.extract_action_prefix_extensions()
                 for action_prefixes in action_prefix_extensions:
                     prefix_paths = np.zeros(
@@ -568,6 +583,13 @@ class MultiAgentVulcan(object):
                         shared_observations,
                     )
 
+                    if (
+                        np.greater(child_node.g, best_gain)
+                        and child_node.timestep >= planning_horizon
+                    ):
+                        best_gain = child_node.g
+
                     open_set.put(child_node)
 
+        print("U: Size of open set: ", open_set.qsize())
         return best_gain, best_action

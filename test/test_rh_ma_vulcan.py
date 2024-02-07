@@ -44,7 +44,7 @@ def visualize_path(paths: List[List[NDArray[np.int64]]], map: Map, filename: str
 
     frames = max(len(path) for path in paths)
     animation = FuncAnimation(fig, update, frames=frames, init_func=init, blit=True)
-    animation.save(filename, writer="imagemagick", fps=1)
+    # animation.save(filename, writer="imagemagick", fps=1)
 
     plt.show()
 
@@ -167,7 +167,7 @@ if __name__ == "__main__":
         vulcan_agents_paths.append(vulcan_path)
 
     plt.imshow(map.grid, cmap="hot")
-    plt.savefig(figures_base_path + "rh-ma-vulcan-" + args.type + ".png")
+    # plt.savefig(figures_base_path + "rh-ma-vulcan-" + args.type + ".png")
 
     visualize_path(
         vulcan_agents_paths,
@@ -207,7 +207,7 @@ if __name__ == "__main__":
         vulcan_agents_paths.append(vulcan_path)
 
     plt.imshow(map.grid, cmap="hot")
-    plt.savefig(figures_base_path + "sa-vulcan-" + args.type + ".png")
+    # plt.savefig(figures_base_path + "sa-vulcan-" + args.type + ".png")
 
     visualize_path(
         vulcan_agents_paths, map, figures_base_path + "sa-vulcan-" + args.type + ".gif"

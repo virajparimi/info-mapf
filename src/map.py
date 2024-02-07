@@ -8,7 +8,7 @@ from dataclasses import dataclass
 
 
 class ActionType(Enum):
-    Wait = "Wait"
+    # Wait = "Wait"
     Left = "Left"
     Right = "Right"
     Up = "Up"
@@ -183,8 +183,8 @@ class Map(object):
         for next in candidates:
             if self.valid_move(current, next.location):
                 neighbors.append(next)
-        if len(neighbors) == 0:
-            neighbors.append(Action(ActionType.Wait, current))
+        # if len(neighbors) == 0:
+        #     neighbors.append(Action(ActionType.Wait, current))
         return neighbors
 
     def extract_next_location(self, current: int, action: str) -> Union[int, bool]:
