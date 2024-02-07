@@ -93,6 +93,8 @@ class MultiAgentVulcan(object):
         self.communication_range = communication_range
         self.mission_duration = max([agent.mission_duration for agent in agents])
 
+        self.children = 0
+
     def planner(self):
         while self.timer < self.mission_duration:
             print("Time = ", self.timer)
@@ -175,6 +177,8 @@ class MultiAgentVulcan(object):
                 agent.timer += 1
             self.timer += 1
 
+        print("Total children created: ", self.children)
+
     def within_range_agents(self) -> Dict[int, List[Agent]]:
         """
         Returns a list of agents within communication range
@@ -233,6 +237,7 @@ class MultiAgentVulcan(object):
             node.timestep = parent.timestep + 1
 
         if node.timestep >= planning_horizon:
+            self.children += 1
             node.h = np.float64(0.0)
         else:
 
