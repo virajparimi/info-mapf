@@ -487,6 +487,7 @@ class MultiAgentVulcan(object):
 
             if current._f < best_gain:
                 print("Size of open set: ", open_set.qsize())
+                print(best_action)
                 return best_gain, best_action
 
             if current.timestep >= planning_horizon:
@@ -516,9 +517,21 @@ class MultiAgentVulcan(object):
             else:
                 print("Current is not a leaf!")
 
-                if current.g < best_gain:
-                    continue
-                action_prefix_extensions = current.extract_action_prefix_extensions()
+                # if current.g < best_gain:
+                #     continue
+
+                valid_actions = []
+                for agent_in_comm_range in agent_bubbles:
+                    valid_neighbors = agent_in_comm_range.map.get_neighbors(
+                        current.agent_locations[agent_in_comm_range.id]
+                    )
+                    for valid_neighbor in valid_neighbors:
+                        valid_actions.append(valid_neighbor.action_type.value)
+                valid_actions = list(set(valid_actions))
+
+                action_prefix_extensions = current.extract_action_prefix_extensions(
+                    valid_actions
+                )
                 for action_prefixes in action_prefix_extensions:
                     prefix_paths = np.zeros(
                         (len(agent_bubbles), len(action_prefixes[target_agent.id]) + 1),
