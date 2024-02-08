@@ -114,9 +114,7 @@ class MultiAgentVulcan(object):
                         shared_observations += (
                             agent_in_comm_range.mdp_handle.observations
                         )
-                    shared_observations = list(
-                        set(shared_observations)
-                    )  # ensure uniqueness of the observations
+                    shared_observations = list(set(shared_observations))
                     # TODO: Which measurement should we use for the locations that are common among these agents?
 
                     horizon = min(
@@ -171,11 +169,7 @@ class MultiAgentVulcan(object):
 
             # Once we have extracted the best actions for each agent, we execute them
             for agent in self.agents:
-                # agent_old_location = deepcopy(agent.current_location)
                 agent.current_location = agent.execute_action(agent_actions[agent.id])
-                # self.map.update_agent_location(
-                #     agent_old_location, agent.current_location
-                # )
                 agent.mdp_handle.update(agent.current_location, self.map)
                 agent.timer += 1
             self.timer += 1
@@ -429,8 +423,6 @@ class MultiAgentVulcan(object):
         for idx, agent in enumerate(agent_bubbles):
             use_vulcan = deepcopy(agent.use_vulcan)
             agent_observation_handle = deepcopy(shared_observations)
-            # if ActionType.Wait.value in current.action_prefixes[agent.id]:
-            #     use_vulcan = False
             future_g_val, agent_f_measurements = self.recursive_information_gain(
                 agent,
                 1,
@@ -477,10 +469,9 @@ class MultiAgentVulcan(object):
         open_set.put(root_node)
 
         best_gain = np.float64(0.0)
-        # best_action = [
-        #     Action(ActionType.Wait, agent.current_location) for agent in agent_bubbles
-        # ]
-        best_action = None
+        best_action = [
+            Action(ActionType.Wait, agent.current_location) for agent in agent_bubbles
+        ]
 
         while not open_set.empty():
             current = open_set.get()
@@ -516,10 +507,6 @@ class MultiAgentVulcan(object):
                         )
             else:
                 print("Current is not a leaf!")
-
-                # if current.g < best_gain:
-                #     continue
-
                 valid_actions = []
                 for agent_in_comm_range in agent_bubbles:
                     valid_neighbors = agent_in_comm_range.map.get_neighbors(

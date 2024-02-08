@@ -3,11 +3,12 @@ import sys
 import numpy as np
 from copy import deepcopy
 from cProfile import Profile
-from typing import List, Tuple
 from numpy.typing import NDArray
 from pstats import SortKey, Stats
 from argparse import ArgumentParser
 from matplotlib import pyplot as plt
+from scipy.stats import multivariate_normal
+from typing import List, Tuple, Any, Union
 from matplotlib.animation import FuncAnimation
 
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(__file__)), "src"))
@@ -18,11 +19,20 @@ from map import Map, Parameters  # NOQA
 from rh_ma_vulcan import MultiAgentVulcan  # NOQA
 
 
-def visualize_path(paths: List[List[NDArray[np.int64]]], map: Map, filename: str):
+def visualize_path(
+    paths: List[List[NDArray[np.int64]]],
+    map: Map,
+    filename: str,
+    map_viz: Union[List[NDArray[Any]], None] = None,
+    save_fig: bool = False,
+):
     fig, ax = plt.subplots()
-    ax.imshow(map.grid, cmap="hot")
+    if map_viz is not None:
+        ax.imshow(zz, extent=(-1, map.num_of_rows, map.num_of_cols, -1), cmap="hot")
+    else:
+        ax.imshow(map.grid, cmap="hot")
 
-    agent_colors = "rbgkymc"
+    agent_colors = "gbrkymc"
     num_of_agents = len(paths)
 
     lines = []
@@ -44,7 +54,8 @@ def visualize_path(paths: List[List[NDArray[np.int64]]], map: Map, filename: str
 
     frames = max(len(path) for path in paths)
     animation = FuncAnimation(fig, update, frames=frames, init_func=init, blit=True)
-    # animation.save(filename, writer="imagemagick", fps=1)
+    if save_fig:
+        animation.save(filename, writer="imagemagick", fps=1)
 
     plt.show()
 
@@ -75,6 +86,10 @@ if __name__ == "__main__":
         type=float,
         default=0.2,
         help="Measurement noise to use",
+    )
+
+    parser.add_argument(
+        "--save_figures", type=bool, default=False, help="Whether to save the plots"
     )
 
     args = parser.parse_args()
@@ -129,6 +144,21 @@ if __name__ == "__main__":
         mission_duration = 35
         communication_range = 5
 
+    x = np.linspace(-1, map.num_of_rows, 1000)
+    y = np.linspace(-1, map.num_of_cols, 1000)
+    xx, yy = np.meshgrid(x, y)
+    grid = np.dstack((xx, yy))
+    zz = np.zeros_like(xx)
+    for i in range(len(map.locations)):
+        linear_location = map.locations[i]
+        location_coord = map.get_coordinate(linear_location)
+        gaussian = map.means[i] * multivariate_normal.pdf(
+            grid, mean=location_coord, cov=1
+        )
+        zz += gaussian
+
+    zz /= np.max(zz)
+
     vulcan_agents = []
     vulcan_map = deepcopy(map)
 
@@ -166,13 +196,17 @@ if __name__ == "__main__":
         )
         vulcan_agents_paths.append(vulcan_path)
 
-    plt.imshow(map.grid, cmap="hot")
-    # plt.savefig(figures_base_path + "rh-ma-vulcan-" + args.type + ".png")
+    plt.imshow(zz, extent=(-1, map.num_of_rows, map.num_of_cols, -1), cmap="hot")
+    # plt.imshow(map.grid, cmap="hot")
+    if args.save_figures:
+        plt.savefig(figures_base_path + "rh-ma-vulcan-" + args.type + ".png")
 
     visualize_path(
         vulcan_agents_paths,
         map,
         figures_base_path + "rh-ma-vulcan-" + args.type + ".gif",
+        [xx, yy, zz],
+        save_fig=args.save_figures,
     )
 
     vulcan_map = deepcopy(map)
@@ -206,9 +240,15 @@ if __name__ == "__main__":
         )
         vulcan_agents_paths.append(vulcan_path)
 
-    plt.imshow(map.grid, cmap="hot")
-    # plt.savefig(figures_base_path + "sa-vulcan-" + args.type + ".png")
+    plt.imshow(zz, extent=(-1, map.num_of_rows, map.num_of_cols, -1), cmap="hot")
+    # plt.imshow(map.grid, cmap="hot")
+    if args.save_figures:
+        plt.savefig(figures_base_path + "sa-vulcan-" + args.type + ".png")
 
     visualize_path(
-        vulcan_agents_paths, map, figures_base_path + "sa-vulcan-" + args.type + ".gif"
+        vulcan_agents_paths,
+        map,
+        figures_base_path + "sa-vulcan-" + args.type + ".gif",
+        [xx, yy, zz],
+        save_fig=args.save_figures,
     )
