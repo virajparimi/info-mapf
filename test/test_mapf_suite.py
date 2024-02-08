@@ -115,7 +115,7 @@ if __name__ == "__main__":
         maze = load_mapf_map(
             os.path.join(
                 os.path.dirname(os.path.abspath(__file__)),
-                "../data/maps/maze-32-32.map",
+                "../data/maps/maze-32-32-4.map",
             )
         )
         rows, cols, max_gps, num_agents, mission_duration, communication_range = (
