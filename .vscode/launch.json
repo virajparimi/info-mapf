@@ -39,6 +39,21 @@
             "justMyCode": true
         },
         {
+            "name": "MAPF-Suite",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/test/test_mapf_suite.py",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "args": [
+                "--map_type",
+                "original",
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
             "name": "Python: Current File with Profiler",
             "type": "debugpy",
             "request": "launch",

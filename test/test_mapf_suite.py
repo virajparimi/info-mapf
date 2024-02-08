@@ -3,29 +3,31 @@ import sys
 import pickle
 import numpy as np
 from copy import deepcopy
-from typing import List, Tuple
 from numpy.typing import NDArray
 from dataclasses import dataclass
+from typing import List, Tuple, Set
 from argparse import ArgumentParser
 
 
 @dataclass
 class VulcanStats:
     path: List[NDArray[np.int64]]
-    phenomenons_discovered: List[Tuple[int, int]]
+    phenomenons_discovered: Set[Tuple[int, int]]
 
 
 @dataclass
 class SampleStats:
     avg_multi_agent_steps: float
     avg_single_agent_steps: float
+    gp_locations: List[Tuple[int, int]]
     multi_agent_stats: List[VulcanStats]
     single_agent_stats: List[VulcanStats]
+    agent_locations: List[Tuple[int, int]]
     avg_multi_agent_phenomenons_discovered: float
     avg_single_agent_phenomenons_discovered: float
 
 
-NUM_SAMPLES = 2
+NUM_SAMPLES = 1000
 
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(__file__)), "src"))
 
@@ -97,7 +99,7 @@ if __name__ == "__main__":
             raise ValueError("Invalid map type")
 
         # Sample the number of phenomenons to generate
-        num_phenomenon = np.random.randint(1, max_gps + 1)
+        num_phenomenon = np.random.randint(num_agents, max_gps + 1)
 
         # Spawn the agents and the phenomenons such that the phenomenons are not spawned on the agents
         agent_locations = [
@@ -105,7 +107,7 @@ if __name__ == "__main__":
             for _ in range(num_agents)
         ]
         gp_locations = []
-        for _ in range(num_phenomenon):
+        while len(gp_locations) < num_phenomenon:
             gp_location = (
                 np.random.randint(0, map_size),
                 np.random.randint(0, map_size),
@@ -121,6 +123,18 @@ if __name__ == "__main__":
             gp_means=np.ones(num_phenomenon).tolist(),
             gp_locations=gp_locations,
             parameters=params,
+        )
+
+        # Object to store the statistics of this iteration
+        sample_stats = SampleStats(
+            multi_agent_stats=[],
+            single_agent_stats=[],
+            avg_multi_agent_steps=0,
+            avg_single_agent_steps=0,
+            gp_locations=gp_locations,
+            agent_locations=agent_locations,
+            avg_multi_agent_phenomenons_discovered=0,
+            avg_single_agent_phenomenons_discovered=0,
         )
 
         # Generate the agents and run the planner
@@ -142,36 +156,36 @@ if __name__ == "__main__":
         rh_ma_vulcan = MultiAgentVulcan(vulcan_map, vulcan_agents, communication_range)
         rh_ma_vulcan.planner()
 
-        # Object to store the statistics of this iteration
-        sample_stats = SampleStats(
-            multi_agent_stats=[],
-            single_agent_stats=[],
-            avg_multi_agent_steps=0,
-            avg_single_agent_steps=0,
-            avg_multi_agent_phenomenons_discovered=0,
-            avg_single_agent_phenomenons_discovered=0,
-        )
-
         # Extract the paths of the agents after running multi-agent vulcan
+        last_step_when_gp_found = [0 for _ in range(len(vulcan_agents))]
         for idx, agent in enumerate(vulcan_agents):
             vulcan_agent_stats = VulcanStats(
                 path=[],
-                phenomenons_discovered=[],
+                phenomenons_discovered=set(),
             )
             for v_location in agent.visited_locations:
                 v_coord = vulcan_map.get_coordinate(v_location)
                 v_coord_compare = (v_coord[1], v_coord[0])
                 if v_coord_compare in gp_locations:
-                    vulcan_agent_stats.phenomenons_discovered.append(v_coord_compare)
+                    vulcan_agent_stats.phenomenons_discovered.add(v_coord_compare)
+                    last_step_when_gp_found[idx] = len(vulcan_agent_stats.path)
                 vulcan_agent_stats.path.append(v_coord)
 
             sample_stats.multi_agent_stats.append(vulcan_agent_stats)
-            sample_stats.avg_multi_agent_steps += len(vulcan_agent_stats.path)
             sample_stats.avg_multi_agent_phenomenons_discovered += len(
                 vulcan_agent_stats.phenomenons_discovered
             )
 
-        sample_stats.avg_multi_agent_steps /= len(vulcan_agents)
+        combined_gps_found = set()
+        for idx, agent in enumerate(vulcan_agents):
+            combined_gps_found |= sample_stats.multi_agent_stats[
+                idx
+            ].phenomenons_discovered
+        if len(combined_gps_found) != len(gp_locations):
+            sample_stats.avg_multi_agent_steps = mission_duration
+        else:
+            sample_stats.avg_multi_agent_steps = max(last_step_when_gp_found)
+
         sample_stats.avg_multi_agent_phenomenons_discovered /= len(vulcan_agents)
 
         # At this point multi-agent vulcan has been run. Now need to run single agent vulcan
@@ -192,26 +206,37 @@ if __name__ == "__main__":
             vulcan_agents.append(vulcan_agent)
 
         # Extract the paths of the agents after running single-agent vulcan
+        last_step_when_gp_found = [0 for _ in range(len(vulcan_agents))]
         for idx, agent in enumerate(vulcan_agents):
             agent.adaptive_search()
             vulcan_agent_stats = VulcanStats(
                 path=[],
-                phenomenons_discovered=[],
+                phenomenons_discovered=set(),
             )
             for v_location in agent.visited_locations:
                 v_coord = vulcan_map.get_coordinate(v_location)
                 v_coord_compare = (v_coord[1], v_coord[0])
                 if v_coord_compare in gp_locations:
-                    vulcan_agent_stats.phenomenons_discovered.append(v_coord_compare)
+                    vulcan_agent_stats.phenomenons_discovered.add(v_coord_compare)
+                    last_step_when_gp_found[idx] = len(vulcan_agent_stats.path)
                 vulcan_agent_stats.path.append(v_coord)
 
             sample_stats.single_agent_stats.append(vulcan_agent_stats)
-            sample_stats.avg_single_agent_steps += len(vulcan_agent_stats.path)
             sample_stats.avg_single_agent_phenomenons_discovered += len(
                 vulcan_agent_stats.phenomenons_discovered
             )
 
-        sample_stats.avg_single_agent_steps /= len(vulcan_agents)
+        combined_gps_found = set()
+        for idx, agent in enumerate(vulcan_agents):
+            combined_gps_found |= sample_stats.single_agent_stats[
+                idx
+            ].phenomenons_discovered
+        combined_gps_found = list(set(combined_gps_found))
+        if len(combined_gps_found) != len(gp_locations):
+            sample_stats.avg_single_agent_steps = mission_duration
+        else:
+            sample_stats.avg_single_agent_steps = max(last_step_when_gp_found)
+
         sample_stats.avg_single_agent_phenomenons_discovered /= len(vulcan_agents)
 
         results.append(sample_stats)
@@ -239,6 +264,10 @@ if __name__ == "__main__":
             single_agent_wise_phenomenons_discovered[idx].append(
                 len(agent.phenomenons_discovered)
             )
+        for idx, agent in enumerate(result.multi_agent_stats):
+            multi_agent_wise_phenomenons_discovered[idx].append(
+                len(agent.phenomenons_discovered)
+            )
 
     single_agent_steps = np.array(single_agent_steps)
     multi_agent_steps = np.array(multi_agent_steps)
@@ -264,14 +293,20 @@ if __name__ == "__main__":
 
     for idx, agent in enumerate(single_agent_wise_phenomenons_discovered):
         agent = np.array(agent)
-        print(
-            f"Single-agent {idx + 1} phenomenons discovered: {np.mean(agent)} +/- {np.std(agent)}"
-        )
+        if agent.shape[0] == 0:
+            mean, std = 0, 0
+        else:
+            mean, std = np.mean(agent), np.std(agent)
+        print(f"Single-agent {idx + 1} phenomenons discovered: {mean} +/- {std}")
     for idx, agent in enumerate(multi_agent_wise_phenomenons_discovered):
         agent = np.array(agent)
-        print(
-            f"Multi-agent {idx + 1} phenomenons discovered: {np.mean(agent)} +/- {np.std(agent)}"
-        )
+        if agent.shape[0] == 0:
+            mean, std = 0, 0
+        else:
+            mean, std = np.mean(agent), np.std(agent)
+        print(f"Multi-agent {idx + 1} phenomenons discovered: {mean} +/- {std}")
 
     with open(results_base_path + "results_" + args.map_type + ".pkl", "wb") as f:
         pickle.dump(results, f)
+
+    print("Results saved")
