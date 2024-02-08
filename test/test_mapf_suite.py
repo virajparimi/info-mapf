@@ -166,7 +166,10 @@ if __name__ == "__main__":
             for v_location in agent.visited_locations:
                 v_coord = vulcan_map.get_coordinate(v_location)
                 v_coord_compare = (v_coord[1], v_coord[0])
-                if v_coord_compare in gp_locations:
+                if (
+                    v_coord_compare in gp_locations
+                    and v_coord_compare not in vulcan_agent_stats.phenomenons_discovered
+                ):
                     vulcan_agent_stats.phenomenons_discovered.add(v_coord_compare)
                     last_step_when_gp_found[idx] = len(vulcan_agent_stats.path)
                 vulcan_agent_stats.path.append(v_coord)
@@ -214,18 +217,23 @@ if __name__ == "__main__":
         last_step_when_gp_found = [0 for _ in range(len(vulcan_agents))]
         agent_phenomenons_discovered = [set() for _ in range(num_agents)]
         for step in range(mission_duration):
+            current_coords = []
             for idx, agent in enumerate(vulcan_agents):
-                agent_coords[idx].append(
-                    vulcan_map.get_coordinate(agent.visited_locations[step])
-                )
-            if len(set(agent_coords)) != num_agents:
+                v_coord = vulcan_map.get_coordinate(agent.visited_locations[step])
+                v_coord_tuple = (v_coord[0], v_coord[1])
+                current_coords.append(v_coord_tuple)
+                agent_coords[idx].append(v_coord_tuple)
+            if len(set(current_coords)) != num_agents:
                 sample_stats.avg_single_agent_steps = mission_duration
                 break
             else:
                 for idx, v_coords in enumerate(agent_coords):
                     v_coord = v_coords[step]
                     v_coord_compare = (v_coord[1], v_coord[0])
-                    if v_coord_compare in gp_locations:
+                    if (
+                        v_coord_compare in gp_locations
+                        and v_coord_compare not in agent_phenomenons_discovered[idx]
+                    ):
                         phenomenons_discovered.add(v_coord_compare)
                         last_step_when_gp_found[idx] = len(v_coords)
                         agent_phenomenons_discovered[idx].add(v_coord_compare)
@@ -240,8 +248,12 @@ if __name__ == "__main__":
                 vulcan_agent_stats.phenomenons_discovered
             )
 
-        if sample_stats.avg_single_agent_steps == 0:  # This is still not set
-            sample_stats.avg_single_agent_steps = max(last_step_when_gp_found)
+        if sample_stats.avg_single_agent_steps == 0:
+            # This is still not set
+            if len(phenomenons_discovered) != len(gp_locations):
+                sample_stats.avg_single_agent_steps = mission_duration
+            else:
+                sample_stats.avg_single_agent_steps = max(last_step_when_gp_found)
         sample_stats.avg_single_agent_phenomenons_discovered /= len(vulcan_agents)
 
         results.append(sample_stats)
