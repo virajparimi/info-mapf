@@ -507,14 +507,14 @@ class MultiAgentVulcan(object):
                         )
             else:
                 print("Current is not a leaf!")
-                valid_actions = []
+                valid_actions = set()
                 for agent_in_comm_range in agent_bubbles:
                     valid_neighbors = agent_in_comm_range.map.get_neighbors(
                         current.agent_locations[agent_in_comm_range.id]
                     )
                     for valid_neighbor in valid_neighbors:
-                        valid_actions.append(valid_neighbor.action_type.value)
-                valid_actions = list(set(valid_actions))
+                        valid_actions.add(valid_neighbor.action_type.value)
+                valid_actions = list(valid_actions)
 
                 action_prefix_extensions = current.extract_action_prefix_extensions(
                     valid_actions
