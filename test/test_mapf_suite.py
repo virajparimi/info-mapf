@@ -37,6 +37,28 @@ from map import Map, Parameters  # NOQA
 from rh_ma_vulcan import MultiAgentVulcan  # NOQA
 
 
+def load_mapf_map(filename: str) -> NDArray[np.bool_]:
+    filecontents = None
+    with open(filename, "r") as f:
+        filecontents = f.readlines()
+
+    filecontents = [line.rstrip() for line in filecontents]
+
+    height = int(filecontents[1].split(" ")[1])
+    width = int(filecontents[2].split(" ")[1])
+    mapcontent = filecontents[4:]
+
+    maze = np.ones((height, width), dtype=np.bool_)
+    for row, line in enumerate(mapcontent):
+        for col, char in enumerate(line):
+            if char == "@":
+                maze[row, col] = False
+            elif char == "T":
+                maze[row, col] = False
+
+    return maze
+
+
 if __name__ == "__main__":
     results_base_path = os.path.dirname(os.path.abspath(__file__)) + "/../data/testing/"
     parser = ArgumentParser()
@@ -44,7 +66,7 @@ if __name__ == "__main__":
         "--map_type",
         type=str,
         default="original",
-        choices=["original", "empty-16", "empty-32", "dense"],
+        choices=["original", "empty-16", "empty-32", "maze-32", "dense"],
         help="Type of map to use",
     )
     args = parser.parse_args()
@@ -60,6 +82,68 @@ if __name__ == "__main__":
         distance_simplification=True,
     )
 
+    # Extract the map parameters
+    maze = None
+    if args.map_type == "original":
+        rows, cols, max_gps, num_agents, mission_duration, communication_range = (
+            11,
+            11,
+            4,
+            2,
+            35,
+            5,
+        )
+    elif args.map_type == "empty-16":
+        rows, cols, max_gps, num_agents, mission_duration, communication_range = (
+            16,
+            16,
+            5,
+            3,
+            50,
+            5,
+        )
+    elif args.map_type == "empty-32":
+        rows, cols, max_gps, num_agents, mission_duration, communication_range = (
+            32,
+            32,
+            10,
+            4,
+            100,
+            5,
+        )
+    elif args.map_type == "maze-32":
+        maze = load_mapf_map(
+            os.path.join(
+                os.path.dirname(os.path.abspath(__file__)),
+                "../data/maps/maze-32-32.map",
+            )
+        )
+        rows, cols, max_gps, num_agents, mission_duration, communication_range = (
+            maze.shape[0],
+            maze.shape[1],
+            10,
+            4,
+            100,
+            5,
+        )
+    elif args.map_type == "dense":
+        maze = load_mapf_map(
+            os.path.join(
+                os.path.dirname(os.path.abspath(__file__)),
+                "../data/maps/den312d.map",
+            )
+        )
+        rows, cols, max_gps, num_agents, mission_duration, communication_range = (
+            maze.shape[0],
+            maze.shape[1],
+            30,
+            8,
+            150,
+            5,
+        )
+    else:
+        raise ValueError("Invalid map type")
+
     results = []
 
     # Run the outer loop for 1000 iterations
@@ -67,58 +151,38 @@ if __name__ == "__main__":
 
         print("Running sample: ", sample + 1)
 
-        # Extract the map parameters
-        if args.map_type == "original":
-            map_size, max_gps, num_agents, mission_duration, communication_range = (
-                11,
-                4,
-                2,
-                35,
-                5,
-            )
-        elif args.map_type == "empty-16":
-            map_size, max_gps, num_agents, mission_duration, communication_range = (
-                16,
-                5,
-                3,
-                50,
-                5,
-            )
-        elif args.map_type == "empty-32":
-            map_size, max_gps, num_agents, mission_duration, communication_range = (
-                32,
-                10,
-                4,
-                100,
-                5,
-            )
-        elif args.map_type == "dense":
-            # TODO: Add functionality to load the MAPF dense map
-            raise ValueError("Not implemented")
-        else:
-            raise ValueError("Invalid map type")
-
         # Sample the number of phenomenons to generate
         num_phenomenon = np.random.randint(num_agents, max_gps + 1)
 
         # Spawn the agents and the phenomenons such that the phenomenons are not spawned on the agents
-        agent_locations = [
-            (np.random.randint(0, map_size), np.random.randint(0, map_size))
-            for _ in range(num_agents)
-        ]
+        agent_locations = []
+        while len(agent_locations) < num_agents:
+            agent_loc = (np.random.randint(0, rows), np.random.randint(0, cols))
+            if maze is not None and maze[agent_loc[0], agent_loc[1]]:
+                agent_locations.append(agent_loc)
+            elif maze is None:
+                agent_locations.append(agent_loc)
+
         gp_locations = []
         while len(gp_locations) < num_phenomenon:
             gp_location = (
-                np.random.randint(0, map_size),
-                np.random.randint(0, map_size),
+                np.random.randint(0, rows),
+                np.random.randint(0, cols),
             )
-            if gp_location not in agent_locations:
+            if (
+                maze is not None
+                and maze[gp_location[0], gp_location[1]]
+                and gp_location not in agent_locations
+            ):
+                gp_locations.append(gp_location)
+            elif maze is None and gp_location not in agent_locations:
                 gp_locations.append(gp_location)
 
         # Generate the map
         map = generate_map(
-            map_size,
-            map_size,
+            rows,
+            cols,
+            maze=maze,
             agent_locations=agent_locations,
             gp_means=np.ones(num_phenomenon).tolist(),
             gp_locations=gp_locations,
