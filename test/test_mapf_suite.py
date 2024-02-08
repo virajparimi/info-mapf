@@ -206,37 +206,42 @@ if __name__ == "__main__":
             vulcan_agents.append(vulcan_agent)
 
         # Extract the paths of the agents after running single-agent vulcan
-        last_step_when_gp_found = [0 for _ in range(len(vulcan_agents))]
         for idx, agent in enumerate(vulcan_agents):
             agent.adaptive_search()
-            vulcan_agent_stats = VulcanStats(
-                path=[],
-                phenomenons_discovered=set(),
-            )
-            for v_location in agent.visited_locations:
-                v_coord = vulcan_map.get_coordinate(v_location)
-                v_coord_compare = (v_coord[1], v_coord[0])
-                if v_coord_compare in gp_locations:
-                    vulcan_agent_stats.phenomenons_discovered.add(v_coord_compare)
-                    last_step_when_gp_found[idx] = len(vulcan_agent_stats.path)
-                vulcan_agent_stats.path.append(v_coord)
 
+        phenomenons_discovered = set()
+        agent_coords = [[] for _ in range(num_agents)]
+        last_step_when_gp_found = [0 for _ in range(len(vulcan_agents))]
+        agent_phenomenons_discovered = [set() for _ in range(num_agents)]
+        for step in range(mission_duration):
+            for idx, agent in enumerate(vulcan_agents):
+                agent_coords[idx].append(
+                    vulcan_map.get_coordinate(agent.visited_locations[step])
+                )
+            if len(set(agent_coords)) != num_agents:
+                sample_stats.avg_single_agent_steps = mission_duration
+                break
+            else:
+                for idx, v_coords in enumerate(agent_coords):
+                    v_coord = v_coords[step]
+                    v_coord_compare = (v_coord[1], v_coord[0])
+                    if v_coord_compare in gp_locations:
+                        phenomenons_discovered.add(v_coord_compare)
+                        last_step_when_gp_found[idx] = len(v_coords)
+                        agent_phenomenons_discovered[idx].add(v_coord_compare)
+
+        for agent in range(num_agents):
+            vulcan_agent_stats = VulcanStats(
+                path=agent_coords[agent],
+                phenomenons_discovered=agent_phenomenons_discovered[agent],
+            )
             sample_stats.single_agent_stats.append(vulcan_agent_stats)
             sample_stats.avg_single_agent_phenomenons_discovered += len(
                 vulcan_agent_stats.phenomenons_discovered
             )
 
-        combined_gps_found = set()
-        for idx, agent in enumerate(vulcan_agents):
-            combined_gps_found |= sample_stats.single_agent_stats[
-                idx
-            ].phenomenons_discovered
-        combined_gps_found = list(set(combined_gps_found))
-        if len(combined_gps_found) != len(gp_locations):
-            sample_stats.avg_single_agent_steps = mission_duration
-        else:
+        if sample_stats.avg_single_agent_steps == 0:  # This is still not set
             sample_stats.avg_single_agent_steps = max(last_step_when_gp_found)
-
         sample_stats.avg_single_agent_phenomenons_discovered /= len(vulcan_agents)
 
         results.append(sample_stats)
