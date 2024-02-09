@@ -491,6 +491,7 @@ class MultiAgentVulcan(object):
                     )  # TODO: Check the logic here again!
 
                 if current.g >= best_gain:
+                    print("Best action was updated!")
                     best_gain = current.g
                     best_action = []
                     for agent_in_comm_range in agent_bubbles:
