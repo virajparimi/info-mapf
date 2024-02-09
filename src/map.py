@@ -187,7 +187,9 @@ class Map(object):
             neighbors.append(Action(ActionType.Wait, current))
         return neighbors
 
-    def extract_next_location(self, current: int, action: str) -> Union[int, bool]:
+    def extract_next_location(
+        self, current: int, action: str, check_validity: bool = False
+    ) -> Union[int, bool]:
         """
         Extracts the next linearized location given the current location and the action taken
         :param current: Current linearized location of an agent
@@ -206,7 +208,10 @@ class Map(object):
             next = current - self.num_of_cols
         else:
             return False
-        return next if self.valid_move(current, next) else False
+
+        if check_validity:
+            return next if self.valid_move(current, next) else False
+        return next
 
     def update_agent_location(self, current: int, next: int):
         """

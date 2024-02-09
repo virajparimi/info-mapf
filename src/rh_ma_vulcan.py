@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import queue
+import logging
 import numpy as np
 import itertools as iter
 from copy import deepcopy
@@ -17,8 +18,10 @@ class MultiAgentSearchNode(object):
         parent: Union[MultiAgentSearchNode, None],
         agents_actions: Dict[int, List[str]],
         agent_locations: Dict[int, int],
+        map_object: Union[Map, None] = None,
     ):
         self.timestep = 0
+        self.map = map_object
         self.parent = parent
         self.action_prefixes = agents_actions
         self.agent_locations = agent_locations
@@ -94,10 +97,12 @@ class MultiAgentVulcan(object):
         self.mission_duration = max([agent.mission_duration for agent in agents])
 
         self.children = 0
+        self.nodes_expanded = 0
+        self.nodes_generated = 0
 
     def planner(self):
         while self.timer < self.mission_duration:
-            print("Time = ", self.timer)
+            logging.info(f"Time = {self.timer}")
             agent_actions = {}
             # Collect agents within communication range
             agent_bubbles = self.within_range_agents()
@@ -133,7 +138,9 @@ class MultiAgentVulcan(object):
                         shared_observations,
                     )
 
-                    print("Total children created for this search: ", self.children)
+                    logging.debug(
+                        f"Total children created for this search: {self.children}"
+                    )
                     self.children = 0
 
                     assert best_action is not None
@@ -227,27 +234,46 @@ class MultiAgentVulcan(object):
         :param planning_horizon: Planning horizon k + h
         :param shared_observations: List of shared observations between the agents inside the communication range
         """
+        agents_future_measurements = None
         node = MultiAgentSearchNode(parent, action_prefixes, agent_locations)
         if parent is not None:
             node.timestep = parent.timestep + 1
+
+        if parent is None:
+            node.g = np.float64(0.0)
+        elif node.timestep < planning_horizon:
+            result = self.compute_multi_agent_information_gain(
+                node, agent_bubbles, planning_horizon, shared_observations
+            )
+            node.g, agents_future_measurements = result
+        else:
+            result = self.compute_multi_agent_information_gain(
+                node, agent_bubbles, planning_horizon, shared_observations
+            )
+            node.g = result[0]
 
         if node.timestep >= planning_horizon:
             self.children += 1
             node.h = np.float64(0.0)
         else:
 
-            # TODO: Do we need to take into account the current observations of the agents?
-            # i.e the random variable corresponding to current timestep
             recursive_map_object = deepcopy(
                 agent_bubbles[0].map
             )  # Take any agent's map
+
             # Update the locations of the agents in the map as its required for updated valid neighbor computation
             for other_agent in agent_bubbles:
                 if node.parent is not None:
-                    recursive_map_object.update_agent_location(
-                        node.parent.agent_locations[other_agent.id],
-                        node.agent_locations[other_agent.id],
+                    older_coords = recursive_map_object.get_coordinate(
+                        node.parent.agent_locations[other_agent.id]
                     )
+                    new_coords = recursive_map_object.get_coordinate(
+                        node.agent_locations[other_agent.id]
+                    )
+                    recursive_map_object.map[older_coords[0], older_coords[1]] = True
+                    recursive_map_object.map[new_coords[0], new_coords[1]] = False
+
+            node.map = recursive_map_object
 
             for agent_in_comm_range in agent_bubbles:
 
@@ -261,28 +287,24 @@ class MultiAgentVulcan(object):
                         node.parent.cached_h_values[agent_in_comm_range.id][dict_key],
                     )
                 else:
+
                     best_reward, _ = agent_in_comm_range.extract_action(
                         agent_locations[agent_in_comm_range.id],
                         node.timestep,
                         planning_horizon - node.timestep,
                         shared_observations,
                         recursive_map_object,
+                        agents_future_measurements,
                     )
+
+                    node.h = np.add(node.h, best_reward)
 
                     if node.parent is not None:
                         node.parent.cached_h_values[agent_in_comm_range.id].update(
                             {dict_key: best_reward}
                         )
 
-                    node.h = np.add(node.h, best_reward)
-
-        if parent is None:
-            node.g = np.float64(0.0)
-        else:
-            node.g = self.compute_multi_agent_information_gain(
-                node, agent_bubbles, planning_horizon, shared_observations
-            )
-
+        self.nodes_generated += 1
         return node
 
     def recursive_information_gain(
@@ -292,7 +314,7 @@ class MultiAgentVulcan(object):
         planning_horizon: int,
         agent_locations_history: Dict[int, Dict[int, int]],
         observations: List[Observation],
-        agents_future_measurements: Dict[int, List[Observation]],
+        agents_future_measurements: Dict[int, Dict[int, List[Observation]]],
         use_vulcan: bool = True,
     ) -> Tuple[np.float64, Dict[int, List[Observation]]]:
         g_val = np.float64(0.0)
@@ -303,7 +325,9 @@ class MultiAgentVulcan(object):
 
         indexed_observations = observations.copy()
         for index in range(self.map.params.J):
-            indexed_observations += agents_future_measurements[index]
+
+            for agent_id in agent_locations_history[current_timestep].keys():
+                indexed_observations += agents_future_measurements[index][agent_id]
             (
                 future_measurement_mean,
                 future_measurement_covariance,
@@ -376,7 +400,7 @@ class MultiAgentVulcan(object):
                 )
             )
             kl_divergence = kl_divergence_not_exist + kl_divergence_exist
-            g_val = (weights[index] / np.sqrt(np.pi)) * kl_divergence
+            g_val += (weights[index] / np.sqrt(np.pi)) * kl_divergence
 
             if current_timestep + 1 < planning_horizon:
                 future_g_val, future_measurements = self.recursive_information_gain(
@@ -389,7 +413,7 @@ class MultiAgentVulcan(object):
                 )
                 for f_timestep, f_measurement in future_measurements.items():
                     measurements[f_timestep] = f_measurement
-                g_val += future_g_val
+                g_val += (weights[index] / np.sqrt(np.pi)) * future_g_val
 
         return g_val, measurements
 
@@ -399,7 +423,7 @@ class MultiAgentVulcan(object):
         agent_bubbles: List[Agent],
         planning_horizon: int,
         shared_observations: List[Observation],
-    ) -> np.float64:
+    ) -> Tuple[np.float64, Dict[int, Dict[int, List[Observation]]]]:
         """
         Compute the multi-agent information gain
         :param current: The current node for which the multi-agent information gain is being computed
@@ -416,7 +440,10 @@ class MultiAgentVulcan(object):
             agent_locations_history[ancestor.timestep] = ancestor.agent_locations
             ancestor = ancestor.parent
 
-        agents_future_measurements = {index: [] for index in range(self.map.params.J)}
+        agents_future_measurements = {index: {} for index in range(self.map.params.J)}
+        for index in range(self.map.params.J):
+            for agent in agent_bubbles:
+                agents_future_measurements[index][agent.id] = []
 
         assert current.parent is not None
 
@@ -434,11 +461,13 @@ class MultiAgentVulcan(object):
             )
 
             for index in range(self.map.params.J):
-                for f_timestep, f_measurement in agent_f_measurements.items():
-                    agents_future_measurements[index].append(f_measurement[index])
+                for f_timestep, f_agents_measurements in agent_f_measurements.items():
+                    agents_future_measurements[index][agent.id].append(
+                        f_agents_measurements[index]
+                    )
             g_val = np.add(g_val, future_g_val)
 
-        return g_val
+        return (g_val, agents_future_measurements)
 
     def multi_agent_search(
         self,
@@ -446,7 +475,7 @@ class MultiAgentVulcan(object):
         agent_bubbles: List[Agent],
         planning_horizon: int,
         shared_observations: List[Observation],
-    ) -> Tuple[np.float64, Union[List[Action], None]]:
+    ) -> Tuple[np.float64, Union[Dict[int, Action], None]]:
         """
         Performs the multi-agent search algorithm for a single agent assuming they are
         in communication range of other agents
@@ -469,48 +498,55 @@ class MultiAgentVulcan(object):
         open_set.put(root_node)
 
         best_gain = np.float64(0.0)
-        best_action = [
-            Action(ActionType.Wait, agent.current_location) for agent in agent_bubbles
-        ]
+        best_action = {
+            agent.id: Action(ActionType.Wait, agent.current_location)
+            for agent in agent_bubbles
+        }
 
         while not open_set.empty():
             current = open_set.get()
+            self.nodes_expanded += 1
 
             if current._f < best_gain:
-                print("Size of open set: ", open_set.qsize())
-                print(best_action)
+                logging.debug("Size of the open set: {open_set.qsize()}")
+                logging.debug("Best action: {best_action}")
                 return best_gain, best_action
 
             if current.timestep >= planning_horizon:
                 # We have reached our planning horizon
 
-                print("Current is a leaf!")
+                logging.debug("Current is a leaf!")
                 if current.parent is not None:
                     self.update_min_costs(
                         current.parent, current.g
                     )  # TODO: Check the logic here again!
 
                 if current.g >= best_gain:
-                    print("Best action was updated!")
+                    logging.debug("Best action was updated!")
                     best_gain = current.g
-                    best_action = []
                     for agent_in_comm_range in agent_bubbles:
                         best_action_str = current.action_prefixes[
                             agent_in_comm_range.id
                         ][0]
                         best_action_location = (
                             agent_in_comm_range.map.extract_next_location(
-                                agent_in_comm_range.current_location, best_action_str
+                                agent_in_comm_range.current_location,
+                                best_action_str,
+                                True,
                             )
                         )
-                        best_action.append(
-                            Action(best_action_str, best_action_location)
+                        assert best_action_location is not False
+                        best_action[agent_in_comm_range.id] = Action(
+                            best_action_str, best_action_location
                         )
+
             else:
-                print("Current is not a leaf!")
+
+                logging.debug("Current is not a leaf!")
+                assert current.map is not None
                 valid_actions = set()
                 for agent_in_comm_range in agent_bubbles:
-                    valid_neighbors = agent_in_comm_range.map.get_neighbors(
+                    valid_neighbors = current.map.get_neighbors(
                         current.agent_locations[agent_in_comm_range.id]
                     )
                     for valid_neighbor in valid_neighbors:
@@ -521,59 +557,54 @@ class MultiAgentVulcan(object):
                     valid_actions
                 )
                 for action_prefixes in action_prefix_extensions:
-                    prefix_paths = np.zeros(
-                        (len(agent_bubbles), len(action_prefixes[target_agent.id]) + 1),
-                        dtype=int,
-                    )
-                    current_locations = [
-                        current.agent_locations[agent.id] for agent in agent_bubbles
-                    ]
-                    prefix_paths[:, 0] = current_locations
 
                     # Validate whether the action prefix can be executed
+                    next_locations = {}
                     invalid_action_prefix = False
                     for agent_idx, agent_in_comm_range in enumerate(agent_bubbles):
-                        for action_idx, action in enumerate(
-                            action_prefixes[agent_in_comm_range.id]
-                        ):
-                            next_pos = agent_in_comm_range.map.extract_next_location(
-                                prefix_paths[agent_idx][action_idx],
-                                action,
-                            )
-
-                            if not next_pos or not agent_in_comm_range.map.valid_move(
-                                prefix_paths[agent_idx][action_idx],
+                        action = action_prefixes[agent_in_comm_range.id][-1]
+                        next_pos = current.map.extract_next_location(
+                            current.agent_locations[agent_in_comm_range.id],
+                            action,
+                        )
+                        if (
+                            next_pos < 0
+                            or next_pos >= current.map.map_size
+                            or current.map.get_manhattan_distance(
+                                current.agent_locations[agent_in_comm_range.id],
                                 next_pos,
-                            ):
-                                invalid_action_prefix = True
-                                break
-
-                            prefix_paths[agent_idx][action_idx + 1] = next_pos
-
-                        if invalid_action_prefix:
-                            break
-
-                    if invalid_action_prefix:
-                        continue
-                    """
-                    If the action prefix is invalid or the next locations are not unique i.e imminent collision,
-                    we skip this action prefix
-                    """
-                    for action_idx in range(len(action_prefixes[target_agent.id]) + 1):
-                        if prefix_paths[:, action_idx].size != len(
-                            np.unique(prefix_paths[:, action_idx])
+                            )
+                            > 1
                         ):
                             invalid_action_prefix = True
                             break
 
+                        next_locations[agent_in_comm_range.id] = next_pos
+
                     if invalid_action_prefix:
                         continue
 
-                    next_locations = {}
-                    for agent_idx, agent_in_comm_range in enumerate(agent_bubbles):
-                        next_locations[agent_in_comm_range.id] = prefix_paths[
-                            agent_idx, len(action_prefixes[target_agent.id])
-                        ]
+                    # Check for vertex collisions and edge collisions given the paths of these agents
+                    for agent_i in agent_bubbles:
+                        for agent_j in agent_bubbles:
+                            if agent_i.id == agent_j.id:
+                                continue
+                            # Vertex collision
+                            if next_locations[agent_i.id] == next_locations[agent_j.id]:
+                                invalid_action_prefix = True
+                                break
+                            # Edge collision
+                            if (
+                                current.agent_locations[agent_i.id]
+                                == next_locations[agent_j.id]
+                                and next_locations[agent_i.id]
+                                == current.agent_locations[agent_j.id]
+                            ):
+                                invalid_action_prefix = True
+                                break
+
+                    if invalid_action_prefix:
+                        continue
 
                     child_node = self.construct_node(
                         current,
@@ -592,5 +623,5 @@ class MultiAgentVulcan(object):
 
                     open_set.put(child_node)
 
-        print("U: Size of open set: ", open_set.qsize())
+        logging.debug("U: Size of the open set: {open_set.qsize()}")
         return best_gain, best_action

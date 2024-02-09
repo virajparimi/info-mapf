@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import logging
 import numpy as np
 from copy import deepcopy
-from typing import List, Tuple
 from scipy.special import kl_div
 from mdp import MarkovDecisionProcess
 from utils import get_nearest_locations
 from map import Action, Map, Observation
+from typing import List, Tuple, Union, Dict
 
 
 class Agent(object):
@@ -41,7 +42,7 @@ class Agent(object):
         not in communication range of other agents
         """
         while self.timer < self.mission_duration:
-            print("Time = ", self.timer)
+            logging.info("Time = %d", self.timer)
             horizon = min(self.planning_horizon, self.mission_duration - self.timer)
             _, best_action = self.extract_action(
                 self.current_location,
@@ -61,6 +62,9 @@ class Agent(object):
         planning_horizon: int,
         observations: List[Observation],
         map_object: Map,
+        agent_future_measurements: Union[
+            Dict[int, Dict[int, List[Observation]]], None
+        ] = None,
     ) -> Tuple[np.float64, Action]:
         """
         Extracts the best action to execute at the current timestep
@@ -75,14 +79,20 @@ class Agent(object):
         valid_neighbors = map_object.get_neighbors(current_location)
         action_rewards = np.zeros(len(valid_neighbors))
         for idx, next in enumerate(valid_neighbors):
-            _, next_location = next.action_type, next.location
-            (
-                future_measurement_mean,
-                future_measurement_covariance,
-            ) = self.mdp_handle.noisy_measurement_function(
-                [next_location], map_object, self.mdp_handle.observations
-            )
+            indexed_observations = observations.copy()
             for index in range(map_object.params.J):
+
+                if agent_future_measurements is not None:
+                    indexed_observations += agent_future_measurements[index][self.id]
+
+                _, next_location = next.action_type, next.location
+                (
+                    future_measurement_mean,
+                    future_measurement_covariance,
+                ) = self.mdp_handle.noisy_measurement_function(
+                    [next_location], map_object, indexed_observations
+                )
+
                 future_noisy_measurement = (
                     abscissae[index]
                     * np.linalg.inv(np.sqrt(2 * future_measurement_covariance))
@@ -91,7 +101,7 @@ class Agent(object):
                 future_noisy_measurement = future_noisy_measurement[0][0]
 
                 # y_{0:k+1}
-                future_observations = observations.copy()
+                future_observations = indexed_observations.copy()
                 future_observations.append(
                     Observation(next_location, future_noisy_measurement)
                 )
@@ -116,7 +126,7 @@ class Agent(object):
                     self.mdp_handle.phenomenon_probability_function(
                         locations_to_consider,
                         map_object,
-                        observations,
+                        indexed_observations,
                         unobserved_phenomenon=False,
                     )
                 )
@@ -178,6 +188,7 @@ class Agent(object):
                         planning_horizon,
                         future_observations,
                         recursive_map_object,
+                        agent_future_measurements,
                     )
 
                     action_rewards[idx] += (

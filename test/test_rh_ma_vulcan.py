@@ -1,5 +1,6 @@
 import os
 import sys
+import logging
 import numpy as np
 from copy import deepcopy
 from cProfile import Profile
@@ -92,6 +93,14 @@ if __name__ == "__main__":
         "--save_figures", type=bool, default=False, help="Whether to save the plots"
     )
 
+    parser.add_argument(
+        "--logging_level",
+        type=str,
+        default="info",
+        choices=["info", "debug"],
+        help="Logging level to use",
+    )
+
     args = parser.parse_args()
 
     params = Parameters(
@@ -105,7 +114,13 @@ if __name__ == "__main__":
         distance_simplification=args.distance_simplification,
     )
 
-    agent_colors = ["r", "b"]
+    logging.basicConfig()
+    if args.logging_level == "debug":
+        logging.getLogger().setLevel(logging.DEBUG)
+    else:
+        logging.getLogger().setLevel(logging.INFO)
+
+    agent_colors = "gbrkymc"
     agent_locations: List[Tuple[int, int]] = [(0, 0)]
 
     if args.type == "single-small":
@@ -126,6 +141,7 @@ if __name__ == "__main__":
         )
     elif args.type == "multi-large":
         agent_locations.append((10, 10))
+        agent_locations.append((5, 5))
         map = generate_map(
             11,
             11,
