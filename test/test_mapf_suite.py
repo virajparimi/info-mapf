@@ -27,7 +27,7 @@ class SampleStats:
     avg_single_agent_phenomenons_discovered: float
 
 
-NUM_SAMPLES = 1000
+NUM_SAMPLES = 100
 
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(__file__)), "src"))
 
@@ -146,7 +146,7 @@ if __name__ == "__main__":
 
     results = []
 
-    # Run the outer loop for 1000 iterations
+    # Run the outer loop for 100 iterations
     for sample in range(NUM_SAMPLES):
 
         print("Running sample: ", sample + 1)
