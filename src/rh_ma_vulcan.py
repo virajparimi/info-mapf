@@ -5,9 +5,9 @@ import logging
 import numpy as np
 import itertools as iter
 from copy import deepcopy
-from map import Map, ActionType
 from scipy.special import kl_div
 from utils import get_nearest_locations
+from map import Grid, RewardMap, ActionType
 from typing import List, Union, Dict, Tuple
 from agent import Agent, Observation, Action
 
@@ -18,10 +18,10 @@ class MultiAgentSearchNode(object):
         parent: Union[MultiAgentSearchNode, None],
         agents_actions: Dict[int, List[str]],
         agent_locations: Dict[int, int],
-        map_object: Union[Map, None] = None,
+        grid: Union[Grid, None] = None,
     ):
         self.timestep = 0
-        self.map = map_object
+        self.grid = grid
         self.parent = parent
         self.action_prefixes = agents_actions
         self.agent_locations = agent_locations
@@ -89,10 +89,17 @@ class MultiAgentSearchNode(object):
 
 
 class MultiAgentVulcan(object):
-    def __init__(self, map: Map, agents: List[Agent], communication_range: int = 5):
+    def __init__(
+        self,
+        grid: Grid,
+        reward_map: RewardMap,
+        agents: List[Agent],
+        communication_range: int = 5,
+    ):
         self.timer = 0
-        self.map = map
+        self.grid = grid
         self.agents = agents
+        self.reward_map = reward_map
         self.communication_range = communication_range
         self.mission_duration = max([agent.mission_duration for agent in agents])
 
@@ -123,7 +130,7 @@ class MultiAgentVulcan(object):
                     # TODO: Which measurement should we use for the locations that are common among these agents?
 
                     horizon = min(
-                        agent.planning_horizon, agent.mission_duration - self.timer
+                        agent.planning_horizon, agent.mission_duration - agent.timer
                     )
 
                     for agent_in_comm_range in agent_bubbles[idx]:
@@ -160,14 +167,15 @@ class MultiAgentVulcan(object):
                 elif not skip_agent[agent.id]:
                     # Re-use vulcan for this single agent
                     horizon = min(
-                        agent.planning_horizon, agent.mission_duration - self.timer
+                        agent.planning_horizon, agent.mission_duration - agent.timer
                     )
                     _, best_action = agent.extract_action(
                         agent.current_location,
-                        self.timer,
-                        self.timer + horizon,
+                        agent.timer,
+                        agent.timer + horizon,
                         agent.mdp_handle.observations,
-                        deepcopy(agent.map),
+                        deepcopy(agent.grid),
+                        agent.reward_map,
                     )
 
                     agent_actions[agent.id] = best_action
@@ -177,7 +185,7 @@ class MultiAgentVulcan(object):
             # Once we have extracted the best actions for each agent, we execute them
             for agent in self.agents:
                 agent.current_location = agent.execute_action(agent_actions[agent.id])
-                agent.mdp_handle.update(agent.current_location, self.map)
+                agent.mdp_handle.update(agent.current_location, agent.reward_map)
                 agent.timer += 1
             self.timer += 1
 
@@ -193,7 +201,7 @@ class MultiAgentVulcan(object):
                 agent_i_location = agent_i.current_location
                 agent_j_location = agent_j.current_location
                 if (
-                    self.map.get_manhattan_distance(agent_i_location, agent_j_location)
+                    self.grid.get_manhattan_distance(agent_i_location, agent_j_location)
                     < self.communication_range
                 ):
                     agent_bubbles[agent_i.id].append(agent_j)
@@ -257,23 +265,23 @@ class MultiAgentVulcan(object):
             node.h = np.float64(0.0)
         else:
 
-            recursive_map_object = deepcopy(
-                agent_bubbles[0].map
-            )  # Take any agent's map
+            recursive_grid_object = deepcopy(
+                agent_bubbles[0].grid
+            )  # Take any agent's grid map
 
             # Update the locations of the agents in the map as its required for updated valid neighbor computation
             for other_agent in agent_bubbles:
                 if node.parent is not None:
-                    older_coords = recursive_map_object.get_coordinate(
+                    older_coords = recursive_grid_object.get_coordinate(
                         node.parent.agent_locations[other_agent.id]
                     )
-                    new_coords = recursive_map_object.get_coordinate(
+                    new_coords = recursive_grid_object.get_coordinate(
                         node.agent_locations[other_agent.id]
                     )
-                    recursive_map_object.map[older_coords[0], older_coords[1]] = True
-                    recursive_map_object.map[new_coords[0], new_coords[1]] = False
+                    recursive_grid_object.grid[older_coords[0], older_coords[1]] = True
+                    recursive_grid_object.grid[new_coords[0], new_coords[1]] = False
 
-            node.map = recursive_map_object
+            node.grid = recursive_grid_object
 
             for agent_in_comm_range in agent_bubbles:
 
@@ -293,7 +301,8 @@ class MultiAgentVulcan(object):
                         node.timestep,
                         planning_horizon - node.timestep,
                         shared_observations,
-                        recursive_map_object,
+                        recursive_grid_object,
+                        agent_in_comm_range.reward_map,
                         agents_future_measurements,
                     )
 
@@ -320,11 +329,11 @@ class MultiAgentVulcan(object):
         g_val = np.float64(0.0)
         measurements = {current_timestep: []}
 
-        abscissae, weights = np.polynomial.hermite.hermgauss(self.map.params.J)
+        abscissae, weights = np.polynomial.hermite.hermgauss(self.reward_map.params.J)
         agent_location = agent_locations_history[current_timestep][agent.id]
 
         indexed_observations = observations.copy()
-        for index in range(self.map.params.J):
+        for index in range(self.reward_map.params.J):
 
             for agent_id in agent_locations_history[current_timestep].keys():
                 indexed_observations += agents_future_measurements[index][agent_id]
@@ -332,7 +341,7 @@ class MultiAgentVulcan(object):
                 future_measurement_mean,
                 future_measurement_covariance,
             ) = agent.mdp_handle.noisy_measurement_function(
-                [agent_location], agent.map, indexed_observations
+                [agent_location], agent.reward_map, indexed_observations
             )
 
             future_noisy_measurement = (
@@ -348,24 +357,25 @@ class MultiAgentVulcan(object):
             future_observations.append(new_observation)
             measurements[current_timestep].append(new_observation)
 
-            if self.map.params.distance_simplification:
+            if self.reward_map.params.distance_simplification:
                 locations_to_consider = get_nearest_locations(
                     [
                         observation.location for observation in future_observations
                     ],  # Using the distance simplification
-                    self.map,
+                    self.reward_map.num_of_rows,
+                    self.reward_map.num_of_cols,
                     np.multiply(
-                        self.map.params.theta_1, 5.0
+                        self.reward_map.params.theta_1, 5.0
                     ),  # TODO: Should we be using theta_1 or theta_2 here?
                 )
             else:
-                locations_to_consider = np.arange(self.map.map_size).tolist()
+                locations_to_consider = np.arange(self.grid.map_size).tolist()
 
             # p(x_i | y_{0:k})
             current_phenomenon_probabilities = (
                 agent.mdp_handle.phenomenon_probability_function(
                     locations_to_consider,
-                    self.map,
+                    self.reward_map,
                     indexed_observations,
                     unobserved_phenomenon=False,
                 )
@@ -375,7 +385,7 @@ class MultiAgentVulcan(object):
             future_phenomenon_probabilities = (
                 agent.mdp_handle.phenomenon_probability_function(
                     locations_to_consider,
-                    self.map,
+                    self.reward_map,
                     future_observations,
                     unobserved_phenomenon=use_vulcan,
                 )
@@ -417,6 +427,24 @@ class MultiAgentVulcan(object):
 
         return g_val, measurements
 
+    def extract_agent_locations_history(
+        self,
+        current: MultiAgentSearchNode,
+        agent_locations_history: Dict[int, Dict[int, int]],
+    ):
+        """
+        Extract the agent locations history from the current node
+        :param current: The current node that is used to go up till the root
+        :param agent_locations_history: The agent locations history
+        """
+        node = current
+        agent_locations_history[node.timestep] = node.agent_locations
+        while node.parent is not None and node.parent.timestep != 0:
+            agent_locations_history[node.parent.timestep] = node.parent.agent_locations
+            node = node.parent
+
+        return agent_locations_history
+
     def compute_multi_agent_information_gain(
         self,
         current: MultiAgentSearchNode,
@@ -433,22 +461,17 @@ class MultiAgentVulcan(object):
         """
         g_val = np.float64(0.0)
 
-        agent_locations_history = {current.timestep: current.agent_locations}
-        ancestor = deepcopy(current.parent)
-        while ancestor is not None and ancestor.timestep != 0:
-            # Go till the nodes that are children of the root node. Locations of the root node are not required
-            agent_locations_history[ancestor.timestep] = ancestor.agent_locations
-            ancestor = ancestor.parent
-
-        agents_future_measurements = {index: {} for index in range(self.map.params.J)}
-        for index in range(self.map.params.J):
+        agent_locations_history = self.extract_agent_locations_history(current, {})
+        agents_future_measurements = {
+            index: {} for index in range(self.reward_map.params.J)
+        }
+        for index in range(self.reward_map.params.J):
             for agent in agent_bubbles:
                 agents_future_measurements[index][agent.id] = []
 
         assert current.parent is not None
 
         for idx, agent in enumerate(agent_bubbles):
-            use_vulcan = deepcopy(agent.use_vulcan)
             agent_observation_handle = deepcopy(shared_observations)
             future_g_val, agent_f_measurements = self.recursive_information_gain(
                 agent,
@@ -457,10 +480,10 @@ class MultiAgentVulcan(object):
                 agent_locations_history,
                 agent_observation_handle,
                 agents_future_measurements,
-                use_vulcan,
+                agent.use_vulcan,
             )
 
-            for index in range(self.map.params.J):
+            for index in range(self.reward_map.params.J):
                 for f_timestep, f_agents_measurements in agent_f_measurements.items():
                     agents_future_measurements[index][agent.id].append(
                         f_agents_measurements[index]
@@ -529,7 +552,7 @@ class MultiAgentVulcan(object):
                             agent_in_comm_range.id
                         ][0]
                         best_action_location = (
-                            agent_in_comm_range.map.extract_next_location(
+                            agent_in_comm_range.grid.extract_next_location(
                                 agent_in_comm_range.current_location,
                                 best_action_str,
                                 True,
@@ -543,10 +566,10 @@ class MultiAgentVulcan(object):
             else:
 
                 logging.debug("Current is not a leaf!")
-                assert current.map is not None
+                assert current.grid is not None
                 valid_actions = set()
                 for agent_in_comm_range in agent_bubbles:
-                    valid_neighbors = current.map.get_neighbors(
+                    valid_neighbors = current.grid.get_neighbors(
                         current.agent_locations[agent_in_comm_range.id]
                     )
                     for valid_neighbor in valid_neighbors:
@@ -563,14 +586,14 @@ class MultiAgentVulcan(object):
                     invalid_action_prefix = False
                     for agent_idx, agent_in_comm_range in enumerate(agent_bubbles):
                         action = action_prefixes[agent_in_comm_range.id][-1]
-                        next_pos = current.map.extract_next_location(
+                        next_pos = current.grid.extract_next_location(
                             current.agent_locations[agent_in_comm_range.id],
                             action,
                         )
                         if (
                             next_pos < 0
-                            or next_pos >= current.map.map_size
-                            or current.map.get_manhattan_distance(
+                            or next_pos >= current.grid.map_size
+                            or current.grid.get_manhattan_distance(
                                 current.agent_locations[agent_in_comm_range.id],
                                 next_pos,
                             )

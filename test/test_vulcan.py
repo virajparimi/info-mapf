@@ -11,8 +11,8 @@ from matplotlib import pyplot as plt
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(__file__)), "src"))
 
 from agent import Agent  # NOQA
-from map import Map, Parameters  # NOQA
 from utils import generate_map  # NOQA
+from map import Grid, RewardMap, Parameters  # NOQA
 
 if __name__ == "__main__":
     figures_base_path = (
@@ -56,15 +56,15 @@ if __name__ == "__main__":
     )
 
     if args.type == "single-small":
-        map = generate_map(5, 5, parameters=params)
+        grid, reward_map = generate_map(5, 5, parameters=params)
     elif args.type == "single-large":
-        map = generate_map(11, 11, parameters=params)
+        grid, reward_map = generate_map(11, 11, parameters=params)
     elif args.type == "multi-small":
-        map = generate_map(
+        grid, reward_map = generate_map(
             5, 5, gp_means=[1, 1], gp_locations=[(1, 1), (4, 4)], parameters=params
         )
     elif args.type == "multi-large":
-        map = generate_map(
+        grid, reward_map = generate_map(
             11,
             11,
             gp_means=[1, 1, 1, 1, 1],
@@ -74,14 +74,15 @@ if __name__ == "__main__":
     else:
         raise ValueError("Invalid type")
 
-    if "small" in args.type:
-        mission_duration = 10
-    else:
-        mission_duration = 35
+    mission_duration = 10 if "small" in args.type else 35
 
-    vulcan_map = deepcopy(map)
+    vulcan_grid = deepcopy(grid)
     vulcan_agent = Agent(
-        id=1, start_location=0, map=vulcan_map, mission_duration=mission_duration
+        id=1,
+        start_location=0,
+        grid=vulcan_grid,
+        reward_map=reward_map,
+        mission_duration=mission_duration,
     )
 
     with Profile() as prof:
@@ -90,21 +91,22 @@ if __name__ == "__main__":
     vulcan_path = []
     for observation in vulcan_agent.mdp_handle.observations:
         location = observation.location
-        vulcan_path.append(map.get_coordinate(location))
+        vulcan_path.append(vulcan_grid.get_coordinate(location))
     print("Vulcan Path")
     print(vulcan_path)
 
     plt.plot([x[1] for x in vulcan_path], [x[0] for x in vulcan_path], "r--", alpha=0.7)
-    plt.imshow(map.grid, cmap="hot")
+    plt.imshow(reward_map.reward_map, cmap="hot")
     plt.savefig(figures_base_path + "vulcan-" + args.type + ".png")
 
     plt.clf()
 
-    conventional_map = deepcopy(map)
+    conventional_grid = deepcopy(grid)
     conventional_agent = Agent(
         id=1,
         start_location=0,
-        map=conventional_map,
+        grid=conventional_grid,
+        reward_map=reward_map,
         mission_duration=mission_duration,
         use_vulcan=False,
     )
@@ -114,7 +116,7 @@ if __name__ == "__main__":
     conventional_path = []
     for observation in conventional_agent.mdp_handle.observations:
         location = observation.location
-        conventional_path.append(map.get_coordinate(location))
+        conventional_path.append(conventional_grid.get_coordinate(location))
 
     print("Conventional Path")
     print(conventional_path)
@@ -124,5 +126,5 @@ if __name__ == "__main__":
         "b--",
         alpha=0.7,
     )
-    plt.imshow(map.grid, cmap="hot")
+    plt.imshow(reward_map.reward_map, cmap="hot")
     plt.savefig(figures_base_path + "conventional-" + args.type + ".png")

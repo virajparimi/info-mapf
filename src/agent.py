@@ -6,8 +6,8 @@ from copy import deepcopy
 from scipy.special import kl_div
 from mdp import MarkovDecisionProcess
 from utils import get_nearest_locations
-from map import Action, Map, Observation
 from typing import List, Tuple, Union, Dict
+from map import Action, Grid, RewardMap, Observation
 
 
 class Agent(object):
@@ -15,20 +15,22 @@ class Agent(object):
         self,
         id: int,
         start_location: int,
-        map: Map,
+        grid: Grid,
+        reward_map: RewardMap,
         mission_duration: int = 5,
         planning_horizon: int = 2,
         use_vulcan: bool = True,
     ):
         self.id = id
         self.timer = 0
-        self.map = map
+        self.grid = grid
+        self.reward_map = reward_map
         self.use_vulcan = use_vulcan
         self.current_location = start_location
         self.mission_duration = mission_duration
         self.planning_horizon = planning_horizon
         self.visited_locations = [start_location]
-        self.mdp_handle = MarkovDecisionProcess(start_location, self.map)
+        self.mdp_handle = MarkovDecisionProcess(start_location, self.reward_map)
 
     def __eq__(self, __value: Agent) -> bool:
         return self.id == __value.id
@@ -49,10 +51,11 @@ class Agent(object):
                 self.timer,
                 self.timer + horizon,
                 self.mdp_handle.observations,
-                deepcopy(self.map),
+                deepcopy(self.grid),
+                self.reward_map,
             )
             self.current_location = self.execute_action(best_action)
-            self.mdp_handle.update(self.current_location, self.map)
+            self.mdp_handle.update(self.current_location, self.reward_map)
             self.timer += 1
 
     def extract_action(
@@ -61,7 +64,8 @@ class Agent(object):
         current_timestep: int,
         planning_horizon: int,
         observations: List[Observation],
-        map_object: Map,
+        grid: Grid,
+        reward_map: RewardMap,
         agent_future_measurements: Union[
             Dict[int, Dict[int, List[Observation]]], None
         ] = None,
@@ -72,15 +76,17 @@ class Agent(object):
         :param current_timestep: Current timestep k
         :param planning_horizon: Planning horizon k + h
         :param observations: List of observations y_{0:k}
-        :param map_object: Map object to query the neighbors of the current location
+        :param grid: Grid object to query the neighbors of the current location
+        :param reward_map: Map object to query the underlying GP
+        :param agent_future_measurements: Cached Future measurements of the agent. Only needed when computing h-val
         """
 
-        abscissae, weights = np.polynomial.hermite.hermgauss(self.map.params.J)
-        valid_neighbors = map_object.get_neighbors(current_location)
+        abscissae, weights = np.polynomial.hermite.hermgauss(self.reward_map.params.J)
+        valid_neighbors = grid.get_neighbors(current_location)
         action_rewards = np.zeros(len(valid_neighbors))
         for idx, next in enumerate(valid_neighbors):
             indexed_observations = observations.copy()
-            for index in range(map_object.params.J):
+            for index in range(reward_map.params.J):
 
                 if agent_future_measurements is not None:
                     indexed_observations += agent_future_measurements[index][self.id]
@@ -90,7 +96,7 @@ class Agent(object):
                     future_measurement_mean,
                     future_measurement_covariance,
                 ) = self.mdp_handle.noisy_measurement_function(
-                    [next_location], map_object, indexed_observations
+                    [next_location], reward_map, indexed_observations
                 )
 
                 future_noisy_measurement = (
@@ -106,26 +112,27 @@ class Agent(object):
                     Observation(next_location, future_noisy_measurement)
                 )
 
-                if map_object.params.distance_simplification:
+                if reward_map.params.distance_simplification:
                     locations_to_consider = get_nearest_locations(
                         [
                             observation.location for observation in future_observations
                         ],  # Using the distance simplification
-                        map_object,
+                        reward_map.num_of_rows,
+                        reward_map.num_of_cols,
                         np.multiply(
-                            map_object.params.theta_1, 5.0
+                            reward_map.params.theta_1, 5.0
                         ),  # TODO: Should we be using theta_1 or theta_2 here?
                     )
                 else:
                     locations_to_consider = [
-                        location_id for location_id in range(map_object.map_size)
+                        location_id for location_id in range(grid.map_size)
                     ]
 
                 # p(x_i | y_{0:k})
                 current_phenomenon_probabilities = (
                     self.mdp_handle.phenomenon_probability_function(
                         locations_to_consider,
-                        map_object,
+                        reward_map,
                         indexed_observations,
                         unobserved_phenomenon=False,
                     )
@@ -135,7 +142,7 @@ class Agent(object):
                 future_phenomenon_probabilities = (
                     self.mdp_handle.phenomenon_probability_function(
                         locations_to_consider,
-                        map_object,
+                        reward_map,
                         future_observations,
                         unobserved_phenomenon=self.use_vulcan,
                     )
@@ -165,29 +172,17 @@ class Agent(object):
 
                 if current_timestep + 1 < planning_horizon:
 
-                    recursive_map_object = deepcopy(map_object)
-                    recursive_map_object.update_agent_location(
+                    recursive_grid_object = deepcopy(grid)
+                    recursive_grid_object.update_agent_location(
                         current_location, next_location
                     )
-                    # current_location_coord = recursive_map_object.get_coordinate(
-                    #     current_location
-                    # )
-                    # next_location_coord = recursive_map_object.get_coordinate(
-                    #     next_location
-                    # )
-                    # recursive_map_object.map[
-                    #     current_location_coord[0], current_location_coord[1]
-                    # ] = True
-                    # recursive_map_object.map[
-                    #     next_location_coord[0], next_location_coord[1]
-                    # ] = False
-
                     next_action_reward, _ = self.extract_action(
                         next_location,
                         current_timestep + 1,
                         planning_horizon,
                         future_observations,
-                        recursive_map_object,
+                        recursive_grid_object,
+                        reward_map,
                         agent_future_measurements,
                     )
 
@@ -206,6 +201,6 @@ class Agent(object):
         :param action: Action to execute
         """
         _, action_location = action.action_type, action.location
-        self.map.update_agent_location(self.current_location, action_location)
+        self.grid.update_agent_location(self.current_location, action_location)
         self.visited_locations.append(action_location)
         return action_location

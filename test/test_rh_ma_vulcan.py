@@ -16,22 +16,26 @@ sys.path.append(os.path.join(os.path.dirname(os.path.dirname(__file__)), "src"))
 
 from agent import Agent  # NOQA
 from utils import generate_map  # NOQA
-from map import Map, Parameters  # NOQA
 from rh_ma_vulcan import MultiAgentVulcan  # NOQA
+from map import Grid, RewardMap, Parameters  # NOQA
 
 
 def visualize_path(
     paths: List[List[NDArray[np.int64]]],
-    map: Map,
+    reward_map: RewardMap,
     filename: str,
     map_viz: Union[List[NDArray[Any]], None] = None,
     save_fig: bool = False,
 ):
     fig, ax = plt.subplots()
     if map_viz is not None:
-        ax.imshow(zz, extent=(-1, map.num_of_rows, map.num_of_cols, -1), cmap="hot")
+        ax.imshow(
+            zz,
+            extent=(-1, reward_map.num_of_rows, reward_map.num_of_cols, -1),
+            cmap="hot",
+        )
     else:
-        ax.imshow(map.grid, cmap="hot")
+        ax.imshow(reward_map.reward_map, cmap="hot")
 
     agent_colors = "gbrkymc"
     num_of_agents = len(paths)
@@ -125,13 +129,17 @@ if __name__ == "__main__":
 
     if args.type == "single-small":
         agent_locations.append((4, 4))
-        map = generate_map(5, 5, agent_locations=agent_locations, parameters=params)
+        grid, reward_map = generate_map(
+            5, 5, agent_locations=agent_locations, parameters=params
+        )
     elif args.type == "single-large":
         agent_locations.append((10, 10))
-        map = generate_map(11, 11, agent_locations=agent_locations, parameters=params)
+        grid, reward_map = generate_map(
+            11, 11, agent_locations=agent_locations, parameters=params
+        )
     elif args.type == "multi-small":
         agent_locations.append((4, 4))
-        map = generate_map(
+        grid, reward_map = generate_map(
             5,
             5,
             agent_locations=agent_locations,
@@ -142,7 +150,7 @@ if __name__ == "__main__":
     elif args.type == "multi-large":
         agent_locations.append((10, 10))
         agent_locations.append((5, 5))
-        map = generate_map(
+        grid, reward_map = generate_map(
             11,
             11,
             agent_locations=agent_locations,
@@ -160,37 +168,41 @@ if __name__ == "__main__":
         mission_duration = 35
         communication_range = 5
 
-    x = np.linspace(-1, map.num_of_rows, 1000)
-    y = np.linspace(-1, map.num_of_cols, 1000)
+    x = np.linspace(-1, reward_map.num_of_rows, 1000)
+    y = np.linspace(-1, reward_map.num_of_cols, 1000)
     xx, yy = np.meshgrid(x, y)
-    grid = np.dstack((xx, yy))
+    meshgrid = np.dstack((xx, yy))
     zz = np.zeros_like(xx)
-    for i in range(len(map.locations)):
-        linear_location = map.locations[i]
-        location_coord = map.get_coordinate(linear_location)
-        gaussian = map.means[i] * multivariate_normal.pdf(
-            grid, mean=location_coord, cov=1
+    for i in range(len(reward_map.locations)):
+        linear_location = reward_map.locations[i]
+        location_coord = reward_map.get_coordinate(linear_location)
+        gaussian = reward_map.means[i] * multivariate_normal.pdf(
+            meshgrid, mean=location_coord, cov=1
         )
         zz += gaussian
-
     zz /= np.max(zz)
 
     vulcan_agents = []
-    vulcan_map = deepcopy(map)
-
+    vulcan_grid = deepcopy(grid)
     for agent in range(len(agent_locations)):
-        agent_location_linearized = vulcan_map.linearize_coordinate(
+        agent_location_linearized = vulcan_grid.linearize_coordinate(
             agent_locations[agent][0], agent_locations[agent][1]
         )
         vulcan_agent = Agent(
             id=agent,
             start_location=agent_location_linearized,
-            map=vulcan_map,
+            grid=vulcan_grid,
+            reward_map=reward_map,
             mission_duration=mission_duration,
         )
         vulcan_agents.append(vulcan_agent)
 
-    rh_ma_vulcan = MultiAgentVulcan(vulcan_map, vulcan_agents, communication_range)
+    rh_ma_vulcan = MultiAgentVulcan(
+        grid=vulcan_grid,
+        reward_map=reward_map,
+        agents=vulcan_agents,
+        communication_range=communication_range,
+    )
 
     with Profile() as prof:
         print(f"{rh_ma_vulcan.planner()}")
@@ -202,7 +214,7 @@ if __name__ == "__main__":
         print("Path for agent ", agent.id)
         vulcan_path = []
         for v_location in agent.visited_locations:
-            vulcan_path.append(map.get_coordinate(v_location))
+            vulcan_path.append(vulcan_grid.get_coordinate(v_location))
         print(vulcan_path)
         plt.plot(
             [x[1] for x in vulcan_path],
@@ -212,29 +224,31 @@ if __name__ == "__main__":
         )
         vulcan_agents_paths.append(vulcan_path)
 
-    plt.imshow(zz, extent=(-1, map.num_of_rows, map.num_of_cols, -1), cmap="hot")
-    # plt.imshow(map.grid, cmap="hot")
+    plt.imshow(
+        zz, extent=(-1, reward_map.num_of_rows, reward_map.num_of_cols, -1), cmap="hot"
+    )
     if args.save_figures:
         plt.savefig(figures_base_path + "rh-ma-vulcan-" + args.type + ".png")
 
     visualize_path(
         vulcan_agents_paths,
-        map,
+        reward_map,
         figures_base_path + "rh-ma-vulcan-" + args.type + ".gif",
         [xx, yy, zz],
         save_fig=args.save_figures,
     )
 
-    vulcan_map = deepcopy(map)
+    vulcan_grid = deepcopy(grid)
     vulcan_agents = []
     for agent in range(len(agent_locations)):
-        agent_location_linearized = vulcan_map.linearize_coordinate(
+        agent_location_linearized = vulcan_grid.linearize_coordinate(
             agent_locations[agent][0], agent_locations[agent][1]
         )
         vulcan_agent = Agent(
             id=agent,
             start_location=agent_location_linearized,
-            map=vulcan_map,
+            grid=vulcan_grid,
+            reward_map=reward_map,
             mission_duration=mission_duration,
         )
         vulcan_agents.append(vulcan_agent)
@@ -244,7 +258,7 @@ if __name__ == "__main__":
         agent.adaptive_search()
         vulcan_path = []
         for v_location in agent.visited_locations:
-            vulcan_path.append(map.get_coordinate(v_location))
+            vulcan_path.append(vulcan_grid.get_coordinate(v_location))
         print("Vulcan Path")
         print(vulcan_path)
 
@@ -256,14 +270,15 @@ if __name__ == "__main__":
         )
         vulcan_agents_paths.append(vulcan_path)
 
-    plt.imshow(zz, extent=(-1, map.num_of_rows, map.num_of_cols, -1), cmap="hot")
-    # plt.imshow(map.grid, cmap="hot")
+    plt.imshow(
+        zz, extent=(-1, reward_map.num_of_rows, reward_map.num_of_cols, -1), cmap="hot"
+    )
     if args.save_figures:
         plt.savefig(figures_base_path + "sa-vulcan-" + args.type + ".png")
 
     visualize_path(
         vulcan_agents_paths,
-        map,
+        reward_map,
         figures_base_path + "sa-vulcan-" + args.type + ".gif",
         [xx, yy, zz],
         save_fig=args.save_figures,

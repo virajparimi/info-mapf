@@ -26,14 +26,25 @@ class SampleStats:
     agent_locations: List[Tuple[int, int]]
 
 
+@dataclass
+class Statistics:
+    rows: int
+    cols: int
+    max_gps: int
+    num_agents: int
+    mission_duration: int
+    communication_range: int
+    stats: List[SampleStats]
+
+
 NUM_SAMPLES = 10
 
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(__file__)), "src"))
 
 from agent import Agent  # NOQA
 from utils import generate_map  # NOQA
-from map import Map, Parameters  # NOQA
 from rh_ma_vulcan import MultiAgentVulcan  # NOQA
+from map import Grid, RewardMap, Parameters  # NOQA
 
 
 def load_mapf_map(filename: str) -> NDArray[np.bool_]:
@@ -190,22 +201,27 @@ def generate_gp_locations(
 
 
 def setup_vulcan_agents(
-    agent_locations: List[Tuple[int, int]], map: Map, mission_duration: int
-) -> Tuple[List[Agent], Map]:
+    agent_locations: List[Tuple[int, int]],
+    grid: Grid,
+    reward_map: RewardMap,
+    mission_duration: int,
+) -> Tuple[List[Agent], Grid]:
+
     vulcan_agents = []
-    vulcan_map = deepcopy(map)
+    vulcan_grid = deepcopy(grid)
     for agent in range(len(agent_locations)):
-        agent_location_linearized = vulcan_map.linearize_coordinate(
+        agent_location_linearized = vulcan_grid.linearize_coordinate(
             agent_locations[agent][0], agent_locations[agent][1]
         )
         vulcan_agent = Agent(
             id=agent,
             start_location=agent_location_linearized,
-            map=vulcan_map,
+            grid=vulcan_grid,
+            reward_map=reward_map,
             mission_duration=mission_duration,
         )
         vulcan_agents.append(vulcan_agent)
-    return (vulcan_agents, vulcan_map)
+    return (vulcan_agents, vulcan_grid)
 
 
 if __name__ == "__main__":
@@ -269,10 +285,10 @@ if __name__ == "__main__":
         )
 
         # Generate the map
-        map = generate_map(
+        grid, reward_map = generate_map(
             rows,
             cols,
-            maze=maze,
+            grid=maze,
             agent_locations=agent_locations,
             gp_means=np.ones(num_phenomenon).tolist(),
             gp_locations=gp_locations,
@@ -289,10 +305,15 @@ if __name__ == "__main__":
             agent_locations=agent_locations,
         )
 
-        vulcan_agents, vulcan_map = setup_vulcan_agents(
-            agent_locations, map, mission_duration
+        vulcan_agents, vulcan_grid = setup_vulcan_agents(
+            agent_locations, grid, reward_map, mission_duration
         )
-        rh_ma_vulcan = MultiAgentVulcan(vulcan_map, vulcan_agents, communication_range)
+        rh_ma_vulcan = MultiAgentVulcan(
+            grid=vulcan_grid,
+            reward_map=reward_map,
+            agents=vulcan_agents,
+            communication_range=communication_range,
+        )
         rh_ma_vulcan.planner()
 
         sample_stats.nodes_expanded = rh_ma_vulcan.nodes_expanded
@@ -305,7 +326,7 @@ if __name__ == "__main__":
                 phenomenons_discovered=set(),
             )
             for v_location in agent.visited_locations:
-                v_coord = vulcan_map.get_coordinate(v_location)
+                v_coord = vulcan_grid.get_coordinate(v_location)
                 v_coord_compare = (v_coord[0], v_coord[1])
                 if v_coord_compare in gp_locations:
                     vulcan_agent_stats.phenomenons_discovered.add(v_coord_compare)
@@ -316,8 +337,8 @@ if __name__ == "__main__":
         # At this point multi-agent vulcan has been run. Now need to run single agent vulcan
 
         # Repeat the same process for single agent vulcan
-        vulcan_agents, vulcan_map = setup_vulcan_agents(
-            agent_locations, map, mission_duration
+        vulcan_agents, vulcan_grid = setup_vulcan_agents(
+            agent_locations, grid, reward_map, mission_duration
         )
 
         # Extract the paths of the agents after running single-agent vulcan
@@ -331,7 +352,7 @@ if __name__ == "__main__":
                 phenomenons_discovered=set(),
             )
             for v_location in agent.visited_locations:
-                v_coord = vulcan_map.get_coordinate(v_location)
+                v_coord = vulcan_grid.get_coordinate(v_location)
                 v_coord_compare = (v_coord[0], v_coord[1])
                 if v_coord_compare in gp_locations:
                     vulcan_agent_stats.phenomenons_discovered.add(v_coord_compare)
@@ -341,7 +362,17 @@ if __name__ == "__main__":
 
         results.append(sample_stats)
 
+    statistics = Statistics(
+        rows=rows,
+        cols=cols,
+        max_gps=max_gps,
+        num_agents=num_agents,
+        mission_duration=mission_duration,
+        communication_range=communication_range,
+        stats=results,
+    )
+
     with open(results_base_path + "results_" + args.map_type + ".pkl", "wb") as f:
-        pickle.dump(results, f)
+        pickle.dump(statistics, f)
 
     print("Results saved")

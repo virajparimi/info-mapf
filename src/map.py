@@ -49,62 +49,20 @@ class Parameters:
     distance_simplification: bool  # Whether to use the distance simplification
 
 
-class Map(object):
-    def __init__(
-        self,
-        maze: NDArray[np.bool_],
-        means: Union[List, None] = None,
-        locations: Union[List, None] = None,
-        params: Union[Parameters, None] = None,
-    ):
-        self.map = maze
-        self.num_of_rows = maze.shape[0]
-        self.num_of_cols = maze.shape[1]
+class Grid(object):
+    def __init__(self, grid: NDArray[np.bool_]):
+        self._grid = grid
+        self.num_of_rows = grid.shape[0]
+        self.num_of_cols = grid.shape[1]
         self.map_size = self.num_of_rows * self.num_of_cols
 
-        if means is None:
-            self.means = [1]
-        else:
-            self.means = means
+    @property
+    def shape(self) -> NDArray[np.int64]:
+        return np.array([self.num_of_rows, self.num_of_cols])
 
-        if locations is None:
-            self.locations = [
-                self.linearize_coordinate(self.num_of_rows // 2, self.num_of_cols // 2)
-            ]
-        else:
-            self.locations = []
-            for loc in locations:
-                self.locations.append(self.linearize_coordinate(loc[0], loc[1]))
-
-        self.grid = np.zeros(self.map.shape)
-        for location_means in range(0, len(self.means)):
-            linearized_location = self.locations[location_means]
-            location = self.get_coordinate(linearized_location)
-            sample_locations = np.random.multivariate_normal(
-                location.T, np.eye(2), size=(1000)
-            )
-            for sample in sample_locations:
-                sample_x, sample_y = sample
-                row = int(np.round(sample_x))
-                column = int(np.round(sample_y))
-                if 0 <= row < maze.shape[0] and 0 <= column < maze.shape[1]:
-                    self.grid[row, column] += 1.0 * self.means[location_means]
-
-        self.grid = self.grid / np.max(self.grid)
-
-        if params is None:
-            self.params = Parameters(
-                theta_1=np.float64(0.4),
-                theta_2=np.float64(0.01),
-                u_tilde=np.float64(1.4),
-                P_1=np.float64(0.98),
-                P_2=np.float64(0.002),
-                J=np.int64(5),
-                measurement_noise=np.float64(0.2),
-                distance_simplification=True,
-            )
-        else:
-            self.params = params
+    @property
+    def grid(self) -> NDArray[np.bool_]:
+        return self.grid
 
     def get_row_coordinate(self, location_id: int) -> int:
         """
@@ -163,7 +121,7 @@ class Map(object):
         if (
             next < 0
             or next >= self.map_size
-            or (not self.map[next_location[0], next_location[1]] and current != next)
+            or (not self.grid[next_location[0], next_location[1]] and current != next)
         ):
             return False
         return self.get_manhattan_distance(current, next) < 2
@@ -223,10 +181,98 @@ class Map(object):
 
         next_location = self.get_coordinate(next)
         if current != next:
-            assert self.map[next_location[0], next_location[1]]
+            assert self.grid[next_location[0], next_location[1]]
         current_location = self.get_coordinate(current)
-        self.map[current_location[0], current_location[1]] = True
-        self.map[next_location[0], next_location[1]] = False
+        self.grid[current_location[0], current_location[1]] = True
+        self.grid[next_location[0], next_location[1]] = False
+
+
+class RewardMap(object):
+    def __init__(
+        self,
+        rows: int,
+        columns: int,
+        means: Union[List, None] = None,
+        locations: Union[List, None] = None,
+        params: Union[Parameters, None] = None,
+    ):
+        self.num_of_rows = rows
+        self.num_of_cols = columns
+
+        self.means = [1] if means is None else means
+        self.locations = (
+            [self.linearize_coordinate(self.num_of_rows // 2, self.num_of_cols // 2)]
+            if locations is None
+            else [self.linearize_coordinate(loc[0], loc[1]) for loc in locations]
+        )
+
+        self._reward_map = np.zeros((self.num_of_rows, self.num_of_cols))
+        for location_means in range(0, len(self.means)):
+            linearized_location = self.locations[location_means]
+            location = self.get_coordinate(linearized_location)
+            sample_locations = np.random.multivariate_normal(
+                location.T, np.eye(2), size=(1000)
+            )
+            for sample in sample_locations:
+                sample_x, sample_y = sample
+                row = int(np.round(sample_x))
+                column = int(np.round(sample_y))
+                if 0 <= row < self.num_of_rows and 0 <= column < self.num_of_cols:
+                    self.reward_map[row, column] += 1.0 * self.means[location_means]
+
+        self._reward_map = self.reward_map / np.max(self.reward_map)
+
+        if params is None:
+            self.params = Parameters(
+                theta_1=np.float64(0.4),
+                theta_2=np.float64(0.01),
+                u_tilde=np.float64(1.4),
+                P_1=np.float64(0.98),
+                P_2=np.float64(0.002),
+                J=np.int64(5),
+                measurement_noise=np.float64(0.2),
+                distance_simplification=True,
+            )
+        else:
+            self.params = params
+
+    @property
+    def reward_map(self) -> NDArray[np.float64]:
+        return self._reward_map
+
+    def get_row_coordinate(self, location_id: int) -> int:
+        """
+        Returns the row coordinate of a linearized location ID
+        :param location_id: Linearized location ID
+        """
+        return location_id // self.num_of_cols
+
+    def get_column_coordinate(self, location_id: int) -> int:
+        """
+        Returns the column coordinate of a linearized location ID
+        :param location_id: Linearized location ID
+        """
+        return location_id % self.num_of_cols
+
+    def get_coordinate(self, location_id: int) -> NDArray[np.int64]:
+        """
+        Returns the 2D coordinate of a linearized location ID
+        :param location_id: Linearized location ID
+        """
+        return np.array(
+            [
+                self.get_row_coordinate(location_id),
+                self.get_column_coordinate(location_id),
+            ]
+        )
+
+    def linearize_coordinate(self, row: int, column: int) -> int:
+        """
+        Returns the linearized location ID of a given 2D coordinate
+        :param row: Row coordinate
+        :param column: Column coordinate
+        """
+        return self.num_of_cols * row + column
 
     def mean_function(self, location_ids: List[int]) -> NDArray[np.float64]:
         """
@@ -237,7 +283,7 @@ class Map(object):
         location_ids_rows = np.array(location_ids) // self.num_of_cols
         location_ids_columns = np.array(location_ids) % self.num_of_cols
         location_ids_coords = np.column_stack((location_ids_rows, location_ids_columns))
-        means = self.grid[location_ids_coords[:, 0], location_ids_coords[:, 1]]
+        means = self.reward_map[location_ids_coords[:, 0], location_ids_coords[:, 1]]
         return means
 
     # Defines the exponential covariance function between two locations for the Gaussian Process
