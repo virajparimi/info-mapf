@@ -62,7 +62,7 @@ class Grid(object):
 
     @property
     def grid(self) -> NDArray[np.bool_]:
-        return self.grid
+        return self._grid
 
     def get_row_coordinate(self, location_id: int) -> int:
         """

@@ -183,8 +183,23 @@ class MultiAgentVulcan(object):
             assert len(agent_actions) == len(self.agents)
 
             # Once we have extracted the best actions for each agent, we execute them
+            old_locations = [agent.current_location for agent in self.agents]
+            old_locations_coords = [
+                self.grid.get_coordinate(location) for location in old_locations
+            ]
+            new_locations = [action.location for action in agent_actions.values()]
+            new_locations_coords = [
+                self.grid.get_coordinate(location) for location in new_locations
+            ]
+
+            for old_loc in old_locations_coords:
+                self.grid.grid[old_loc[0], old_loc[1]] = True
+            for new_loc in new_locations_coords:
+                self.grid.grid[new_loc[0], new_loc[1]] = False
+
             for agent in self.agents:
-                agent.current_location = agent.execute_action(agent_actions[agent.id])
+                agent.current_location = agent_actions[agent.id].location
+                agent.visited_locations.append(agent.current_location)
                 agent.mdp_handle.update(agent.current_location, agent.reward_map)
                 agent.timer += 1
             self.timer += 1
@@ -555,10 +570,8 @@ class MultiAgentVulcan(object):
                             agent_in_comm_range.grid.extract_next_location(
                                 agent_in_comm_range.current_location,
                                 best_action_str,
-                                True,
                             )
                         )
-                        assert best_action_location is not False
                         best_action[agent_in_comm_range.id] = Action(
                             best_action_str, best_action_location
                         )

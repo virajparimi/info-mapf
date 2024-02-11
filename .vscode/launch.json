@@ -48,7 +48,22 @@
             },
             "args": [
                 "--map_type",
-                "original",
+                "empty-16",
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "MAPF Analysis",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/test/analyze_mapf_suite_results.py",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "args": [
+                "--results_pkl",
+                "results_original.pkl",
             ],
             "console": "integratedTerminal",
             "justMyCode": true
