@@ -5,6 +5,7 @@ import logging
 import numpy as np
 import multiprocessing
 from copy import deepcopy
+from pympler import asizeof
 from numpy.typing import NDArray
 from dataclasses import dataclass
 from argparse import ArgumentParser
@@ -38,7 +39,7 @@ class Statistics:
     stats: List[SampleStats]
 
 
-NUM_SAMPLES = 100
+NUM_SAMPLES = 2
 
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(__file__)), "src"))
 
@@ -401,6 +402,9 @@ if __name__ == "__main__":
         communication_range=communication_range,
         stats=results,
     )
+
+    print(asizeof(statistics))
+    assert False
 
     with open(results_base_path + "results_" + args.map_type + ".pkl", "wb") as f:
         pickle.dump(statistics, f)
