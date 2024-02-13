@@ -9,7 +9,7 @@ from scipy.special import kl_div
 from utils import get_nearest_locations
 from map import Grid, RewardMap, ActionType
 from agent import Agent, Observation, Action
-from typing import List, Union, Dict, Tuple, Set
+from typing import List, Union, Dict, Tuple, Set, Generator, Any
 
 
 class MultiAgentSearchNode(object):
@@ -68,7 +68,7 @@ class MultiAgentSearchNode(object):
 
     def extract_action_prefix_extensions(
         self, agent_actions: Union[List[str], None] = None
-    ) -> List[Dict[int, List[str]]]:
+    ) -> Generator[Dict[int, List[str]], Any, Any]:
         """
         Return a list of action sequences corresponding to one step extensions of the node's path prefix
         :param agent_actions: The possible actions agents can take
@@ -77,15 +77,12 @@ class MultiAgentSearchNode(object):
         if agent_actions is None:
             agent_actions = [action_type.value for action_type in ActionType]
 
-        extensions = []
         for extension in iter.product(agent_actions, repeat=len(self.action_prefixes)):
             updated_extension = deepcopy(self.action_prefixes)
             for idx, agent_id in enumerate(self.action_prefixes.keys()):
                 agent_prefix = updated_extension[agent_id]
                 agent_prefix.append(extension[idx])
-            extensions.append(updated_extension)
-
-        return extensions
+            yield updated_extension
 
 
 class MultiAgentVulcan(object):
@@ -591,7 +588,7 @@ class MultiAgentVulcan(object):
                         current.parent, current.g
                     )  # TODO: Check the logic here again!
 
-                if current.g > best_gain:
+                if current.g >= best_gain:
                     logging.debug("Best action was updated!")
                     best_gain = current.g
                     for agent_in_comm_range in agent_bubbles:
@@ -621,10 +618,9 @@ class MultiAgentVulcan(object):
                         valid_actions.add(valid_neighbor.action_type.value)
                 valid_actions = list(valid_actions)
 
-                action_prefix_extensions = current.extract_action_prefix_extensions(
+                for action_prefixes in current.extract_action_prefix_extensions(
                     valid_actions
-                )
-                for action_prefixes in action_prefix_extensions:
+                ):
 
                     # Validate whether the action prefix can be executed
                     next_locations = {}

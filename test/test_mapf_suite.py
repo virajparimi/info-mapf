@@ -39,7 +39,7 @@ class Statistics:
     stats: List[SampleStats]
 
 
-NUM_SAMPLES = 2
+NUM_SAMPLES = 100
 
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(__file__)), "src"))
 
