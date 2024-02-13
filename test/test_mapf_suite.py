@@ -237,7 +237,7 @@ def execute_sample(parameter: Dict[str, Any], sample_id: int) -> SampleStats:
 
     # Spawn the agents and the phenomenons such that the phenomenons are not spawned on the agents
     agent_locations = generate_agent_locations(
-        num_agents,
+        parameter["num_agents"],
         parameter["rows"],
         parameter["cols"],
         parameter["communication_range"],
@@ -387,11 +387,15 @@ if __name__ == "__main__":
     }
     results = []
 
-    # Run the outer loop for 100 iterations
-    with multiprocessing.Pool(processes=multiprocessing.cpu_count() // 2) as pool:
-        results = pool.starmap(
-            execute_sample, [(arguments, i) for i in range(NUM_SAMPLES)]
-        )
+    # multiprocessing.set_start_method("fork")
+    # # Run the outer loop for 100 iterations
+    # with multiprocessing.Pool(processes=multiprocessing.cpu_count() // 2) as pool:
+    #     results = pool.starmap(
+    #         execute_sample, [(arguments, i) for i in range(NUM_SAMPLES)]
+    #     )
+
+    for i in range(NUM_SAMPLES):
+        results.append(execute_sample(arguments, i))
 
     statistics = Statistics(
         rows=rows,
@@ -404,7 +408,6 @@ if __name__ == "__main__":
     )
 
     print(asizeof.asizeof(statistics))
-    assert False
 
     with open(results_base_path + "results_" + args.map_type + ".pkl", "wb") as f:
         pickle.dump(statistics, f)

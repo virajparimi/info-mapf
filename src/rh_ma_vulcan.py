@@ -8,8 +8,8 @@ from copy import deepcopy
 from scipy.special import kl_div
 from utils import get_nearest_locations
 from map import Grid, RewardMap, ActionType
-from typing import List, Union, Dict, Tuple
 from agent import Agent, Observation, Action
+from typing import List, Union, Dict, Tuple, Set
 
 
 class MultiAgentSearchNode(object):
@@ -204,6 +204,31 @@ class MultiAgentVulcan(object):
                 agent.timer += 1
             self.timer += 1
 
+    def find_minimal_disjoint_sets(
+        self, agent_bubbles: List[Set[Agent]]
+    ) -> List[Set[Agent]]:
+        """
+        Given a list of sets, find the minimal disjoint sets
+        :param agent_bubbles: List of sets
+        """
+        minimal_disjoint_sets = []
+
+        for bubble in agent_bubbles:
+            intersecting_sets = []
+            for idx, existing_set in enumerate(minimal_disjoint_sets):
+                if set(bubble).intersection(existing_set):
+                    intersecting_sets.append(idx)
+
+            if not intersecting_sets:
+                minimal_disjoint_sets.append(set(bubble))
+            else:
+                merged_set = set(bubble)
+                for idx in sorted(intersecting_sets, reverse=True):
+                    merged_set |= minimal_disjoint_sets.pop(idx)
+                minimal_disjoint_sets.append(merged_set)
+
+        return minimal_disjoint_sets
+
     def within_range_agents(self) -> Dict[int, List[Agent]]:
         """
         Returns a list of agents within communication range
@@ -225,12 +250,13 @@ class MultiAgentVulcan(object):
                 agent_bubbles[agent_i.id], key=lambda x: x.id
             )
 
-        unique_agent_bubbles = []
+        modified_agent_bubbles = [set(bubble) for bubble in agent_bubbles]
+        minimal_disjoint_sets = self.find_minimal_disjoint_sets(modified_agent_bubbles)
         mapped_agent_bubbles = {}
-        for agent_idx, agent_bubble in enumerate(agent_bubbles):
-            if agent_bubble not in unique_agent_bubbles:
-                unique_agent_bubbles.append(agent_bubble)
-                mapped_agent_bubbles[agent_idx] = agent_bubble
+        for idx, bubble in enumerate(minimal_disjoint_sets):
+            list_bubble = list(bubble)
+            min_id = min([agent.id for agent in list_bubble])
+            mapped_agent_bubbles[min_id] = list_bubble
 
         return mapped_agent_bubbles
 
