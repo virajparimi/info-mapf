@@ -274,6 +274,8 @@ def execute_sample(parameter: Dict[str, Any], sample_id: int) -> SampleStats:
     vulcan_agents, vulcan_grid = setup_vulcan_agents(
         agent_locations, grid, reward_map, parameter["mission_duration"]
     )
+
+    logging.info("Running multi-agent vulcan")
     rh_ma_vulcan = MultiAgentVulcan(
         grid=vulcan_grid,
         reward_map=reward_map,
@@ -309,6 +311,7 @@ def execute_sample(parameter: Dict[str, Any], sample_id: int) -> SampleStats:
 
     # Extract the paths of the agents after running single-agent vulcan
     for idx, agent in enumerate(vulcan_agents):
+        logging.info("Running single-agent vulcan for agent: %d", idx)
         agent.adaptive_search()
 
     # Extract the paths of the agents after running multi-agent vulcan
