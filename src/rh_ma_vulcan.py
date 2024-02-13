@@ -406,7 +406,7 @@ class MultiAgentVulcan(object):
                     self.reward_map.num_of_rows,
                     self.reward_map.num_of_cols,
                     np.multiply(
-                        self.reward_map.params.theta_1, 5.0
+                        self.reward_map.params.theta_1, 3.0
                     ),  # TODO: Should we be using theta_1 or theta_2 here?
                 )
             else:
@@ -591,7 +591,7 @@ class MultiAgentVulcan(object):
                         current.parent, current.g
                     )  # TODO: Check the logic here again!
 
-                if current.g >= best_gain:
+                if current.g > best_gain:
                     logging.debug("Best action was updated!")
                     best_gain = current.g
                     for agent_in_comm_range in agent_bubbles:

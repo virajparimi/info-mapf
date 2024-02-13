@@ -120,7 +120,7 @@ class Agent(object):
                         reward_map.num_of_rows,
                         reward_map.num_of_cols,
                         np.multiply(
-                            reward_map.params.theta_1, 5.0
+                            reward_map.params.theta_1, 3.0
                         ),  # TODO: Should we be using theta_1 or theta_2 here?
                     )
                 else:
