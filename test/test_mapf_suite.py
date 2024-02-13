@@ -403,7 +403,7 @@ if __name__ == "__main__":
         stats=results,
     )
 
-    print(asizeof(statistics))
+    print(asizeof.asizeof(statistics))
     assert False
 
     with open(results_base_path + "results_" + args.map_type + ".pkl", "wb") as f:
