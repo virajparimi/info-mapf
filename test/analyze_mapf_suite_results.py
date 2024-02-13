@@ -3,9 +3,11 @@ import sys
 import pickle
 import logging
 import numpy as np
-from typing import List, Tuple
 from numpy.typing import NDArray
 from argparse import ArgumentParser
+from matplotlib import pyplot as plt
+from typing import List, Tuple, Any, Union
+from matplotlib.animation import FuncAnimation
 from test_mapf_suite import Statistics, SampleStats, VulcanStats  # NOQA
 
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(__file__)), "src"))
@@ -14,6 +16,54 @@ from agent import Agent  # NOQA
 from utils import generate_map  # NOQA
 from map import Grid, RewardMap, Parameters  # NOQA
 from rh_ma_vulcan import MultiAgentVulcan  # NOQA
+
+
+def visualize_path(
+    paths: List[List[NDArray[np.int64]]],
+    reward_map: RewardMap,
+    filename: str,
+    map_viz: Union[List[NDArray[Any]], None] = None,
+    save_fig: bool = False,
+):
+    fig, ax = plt.subplots()
+    if map_viz is not None:
+        ax.imshow(
+            zz,
+            extent=(-1, reward_map.num_of_rows, reward_map.num_of_cols, -1),
+            cmap="hot",
+        )
+    else:
+        ax.imshow(reward_map.reward_map, cmap="hot")
+
+    agent_colors = "gbrkymc"
+    num_of_agents = len(paths)
+
+    lines = []
+    for agent in range(num_of_agents):
+        (line,) = ax.plot([], [], lw=2, color=agent_colors[agent], ls="--", alpha=0.7)
+        lines.append(line)
+
+    def init():
+        for line in lines:
+            line.set_data([], [])
+        return lines
+
+    def update(frame):
+        for i, path in enumerate(paths):
+            x_data = [point[1] for point in path[: frame + 1]]
+            y_data = [point[0] for point in path[: frame + 1]]
+            lines[i].set_data(x_data, y_data)
+        return lines
+
+    frames = max(len(path) for path in paths)
+    ani = FuncAnimation(
+        fig, update, frames=frames, init_func=init, blit=True, repeat=False
+    )
+
+    if save_fig:
+        ani.save(filename, writer="imagemagick", fps=1)
+    else:
+        plt.show()
 
 
 def validate_paths(

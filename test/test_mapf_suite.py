@@ -3,11 +3,12 @@ import sys
 import pickle
 import logging
 import numpy as np
+import multiprocessing
 from copy import deepcopy
 from numpy.typing import NDArray
 from dataclasses import dataclass
 from argparse import ArgumentParser
-from typing import List, Tuple, Set, Union
+from typing import List, Tuple, Set, Union, Dict, Any
 
 
 @dataclass
@@ -37,7 +38,7 @@ class Statistics:
     stats: List[SampleStats]
 
 
-NUM_SAMPLES = 100
+NUM_SAMPLES = 3
 
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(__file__)), "src"))
 
@@ -224,6 +225,110 @@ def setup_vulcan_agents(
     return (vulcan_agents, vulcan_grid)
 
 
+def execute_sample(parameter: Dict[str, Any], sample_id: int) -> SampleStats:
+
+    logging.info("Running sample: %d", sample_id + 1)
+
+    # Sample the number of phenomenons to generate
+    num_phenomenon = np.random.randint(
+        parameter["num_agents"], parameter["max_gps"] + 1
+    )
+
+    # Spawn the agents and the phenomenons such that the phenomenons are not spawned on the agents
+    agent_locations = generate_agent_locations(
+        num_agents,
+        parameter["rows"],
+        parameter["cols"],
+        parameter["communication_range"],
+        parameter["maze"],
+    )
+    gp_locations = generate_gp_locations(
+        num_phenomenon,
+        parameter["rows"],
+        parameter["cols"],
+        parameter["maze"],
+        agent_locations,
+    )
+
+    # Generate the map
+    grid, reward_map = generate_map(
+        parameter["rows"],
+        parameter["cols"],
+        grid=parameter["maze"],
+        agent_locations=agent_locations,
+        gp_means=np.ones(num_phenomenon).tolist(),
+        gp_locations=gp_locations,
+        parameters=parameter["params"],
+    )
+
+    # Object to store the statistics of this iteration
+    sample_stats = SampleStats(
+        nodes_expanded=0,
+        nodes_generated=0,
+        multi_agent_stats=[],
+        single_agent_stats=[],
+        gp_locations=gp_locations,
+        agent_locations=agent_locations,
+    )
+
+    vulcan_agents, vulcan_grid = setup_vulcan_agents(
+        agent_locations, grid, reward_map, parameter["mission_duration"]
+    )
+    rh_ma_vulcan = MultiAgentVulcan(
+        grid=vulcan_grid,
+        reward_map=reward_map,
+        agents=vulcan_agents,
+        communication_range=parameter["communication_range"],
+    )
+    rh_ma_vulcan.planner()
+
+    sample_stats.nodes_expanded = rh_ma_vulcan.nodes_expanded
+    sample_stats.nodes_generated = rh_ma_vulcan.nodes_generated
+
+    # Extract the paths of the agents after running multi-agent vulcan
+    for idx, agent in enumerate(vulcan_agents):
+        vulcan_agent_stats = VulcanStats(
+            path=[],
+            phenomenons_discovered=set(),
+        )
+        for v_location in agent.visited_locations:
+            v_coord = vulcan_grid.get_coordinate(v_location)
+            v_coord_compare = (v_coord[0], v_coord[1])
+            if v_coord_compare in gp_locations:
+                vulcan_agent_stats.phenomenons_discovered.add(v_coord_compare)
+            vulcan_agent_stats.path.append(v_coord)
+
+        sample_stats.multi_agent_stats.append(vulcan_agent_stats)
+
+    # At this point multi-agent vulcan has been run. Now need to run single agent vulcan
+
+    # Repeat the same process for single agent vulcan
+    vulcan_agents, vulcan_grid = setup_vulcan_agents(
+        agent_locations, grid, reward_map, parameter["mission_duration"]
+    )
+
+    # Extract the paths of the agents after running single-agent vulcan
+    for idx, agent in enumerate(vulcan_agents):
+        agent.adaptive_search()
+
+    # Extract the paths of the agents after running multi-agent vulcan
+    for idx, agent in enumerate(vulcan_agents):
+        vulcan_agent_stats = VulcanStats(
+            path=[],
+            phenomenons_discovered=set(),
+        )
+        for v_location in agent.visited_locations:
+            v_coord = vulcan_grid.get_coordinate(v_location)
+            v_coord_compare = (v_coord[0], v_coord[1])
+            if v_coord_compare in gp_locations:
+                vulcan_agent_stats.phenomenons_discovered.add(v_coord_compare)
+            vulcan_agent_stats.path.append(v_coord)
+
+        sample_stats.single_agent_stats.append(vulcan_agent_stats)
+
+    return sample_stats
+
+
 if __name__ == "__main__":
     results_base_path = os.path.dirname(os.path.abspath(__file__)) + "/../data/testing/"
     parser = ArgumentParser()
@@ -266,101 +371,23 @@ if __name__ == "__main__":
     rows, cols, max_gps, num_agents, mission_duration, communication_range, maze = (
         setup_experiment_parameters(args.map_type)
     )
+    arguments = {
+        "params": params,
+        "maze": maze,
+        "rows": rows,
+        "cols": cols,
+        "max_gps": max_gps,
+        "num_agents": num_agents,
+        "mission_duration": mission_duration,
+        "communication_range": communication_range,
+    }
     results = []
 
     # Run the outer loop for 100 iterations
-    for sample in range(NUM_SAMPLES):
-
-        logging.info("Running sample: %d", sample + 1)
-
-        # Sample the number of phenomenons to generate
-        num_phenomenon = np.random.randint(num_agents, max_gps + 1)
-
-        # Spawn the agents and the phenomenons such that the phenomenons are not spawned on the agents
-        agent_locations = generate_agent_locations(
-            num_agents, rows, cols, communication_range, maze
+    with multiprocessing.Pool(processes=multiprocessing.cpu_count() // 2) as pool:
+        results = pool.starmap(
+            execute_sample, [(arguments, i) for i in range(NUM_SAMPLES)]
         )
-        gp_locations = generate_gp_locations(
-            num_phenomenon, rows, cols, maze, agent_locations
-        )
-
-        # Generate the map
-        grid, reward_map = generate_map(
-            rows,
-            cols,
-            grid=maze,
-            agent_locations=agent_locations,
-            gp_means=np.ones(num_phenomenon).tolist(),
-            gp_locations=gp_locations,
-            parameters=params,
-        )
-
-        # Object to store the statistics of this iteration
-        sample_stats = SampleStats(
-            nodes_expanded=0,
-            nodes_generated=0,
-            multi_agent_stats=[],
-            single_agent_stats=[],
-            gp_locations=gp_locations,
-            agent_locations=agent_locations,
-        )
-
-        vulcan_agents, vulcan_grid = setup_vulcan_agents(
-            agent_locations, grid, reward_map, mission_duration
-        )
-        rh_ma_vulcan = MultiAgentVulcan(
-            grid=vulcan_grid,
-            reward_map=reward_map,
-            agents=vulcan_agents,
-            communication_range=communication_range,
-        )
-        rh_ma_vulcan.planner()
-
-        sample_stats.nodes_expanded = rh_ma_vulcan.nodes_expanded
-        sample_stats.nodes_generated = rh_ma_vulcan.nodes_generated
-
-        # Extract the paths of the agents after running multi-agent vulcan
-        for idx, agent in enumerate(vulcan_agents):
-            vulcan_agent_stats = VulcanStats(
-                path=[],
-                phenomenons_discovered=set(),
-            )
-            for v_location in agent.visited_locations:
-                v_coord = vulcan_grid.get_coordinate(v_location)
-                v_coord_compare = (v_coord[0], v_coord[1])
-                if v_coord_compare in gp_locations:
-                    vulcan_agent_stats.phenomenons_discovered.add(v_coord_compare)
-                vulcan_agent_stats.path.append(v_coord)
-
-            sample_stats.multi_agent_stats.append(vulcan_agent_stats)
-
-        # At this point multi-agent vulcan has been run. Now need to run single agent vulcan
-
-        # Repeat the same process for single agent vulcan
-        vulcan_agents, vulcan_grid = setup_vulcan_agents(
-            agent_locations, grid, reward_map, mission_duration
-        )
-
-        # Extract the paths of the agents after running single-agent vulcan
-        for idx, agent in enumerate(vulcan_agents):
-            agent.adaptive_search()
-
-        # Extract the paths of the agents after running multi-agent vulcan
-        for idx, agent in enumerate(vulcan_agents):
-            vulcan_agent_stats = VulcanStats(
-                path=[],
-                phenomenons_discovered=set(),
-            )
-            for v_location in agent.visited_locations:
-                v_coord = vulcan_grid.get_coordinate(v_location)
-                v_coord_compare = (v_coord[0], v_coord[1])
-                if v_coord_compare in gp_locations:
-                    vulcan_agent_stats.phenomenons_discovered.add(v_coord_compare)
-                vulcan_agent_stats.path.append(v_coord)
-
-            sample_stats.single_agent_stats.append(vulcan_agent_stats)
-
-        results.append(sample_stats)
 
     statistics = Statistics(
         rows=rows,

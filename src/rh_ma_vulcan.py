@@ -523,6 +523,12 @@ class MultiAgentVulcan(object):
         :param shared_observations: List of shared observations between the agents inside the communication range
         """
 
+        logging.debug(
+            "Starting multi-agent search algorithm for "
+            + str(len(agent_bubbles))
+            + " agents"
+        )
+
         root_node = self.construct_node(
             None,
             {agent.id: [] for agent in agent_bubbles},
@@ -546,8 +552,8 @@ class MultiAgentVulcan(object):
             self.nodes_expanded += 1
 
             if current._f < best_gain:
-                logging.debug("Size of the open set: {open_set.qsize()}")
-                logging.debug("Best action: {best_action}")
+                logging.debug("Size of the open set: " + str(open_set.qsize()))
+                logging.debug("Best action: " + str(best_action))
                 return best_gain, best_action
 
             if current.timestep >= planning_horizon:
