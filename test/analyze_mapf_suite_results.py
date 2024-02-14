@@ -7,8 +7,9 @@ from numpy.typing import NDArray
 from argparse import ArgumentParser
 from matplotlib import pyplot as plt
 from typing import List, Tuple, Any, Union
+from scipy.stats import multivariate_normal
 from matplotlib.animation import FuncAnimation
-from test_mapf_suite import Statistics, SampleStats, VulcanStats  # NOQA
+from test_mapf_suite import Statistics, SampleStats, VulcanStats, load_mapf_map  # NOQA
 
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(__file__)), "src"))
 
@@ -105,6 +106,9 @@ def validate_paths(
 
 if __name__ == "__main__":
     results_base_path = os.path.dirname(os.path.abspath(__file__)) + "/../data/testing/"
+    figures_base_path = (
+        os.path.dirname(os.path.abspath(__file__)) + "/../figures/testing/"
+    )
 
     parser = ArgumentParser()
     parser.add_argument(
@@ -263,6 +267,12 @@ if __name__ == "__main__":
     multi_agent_phenomenons_discovered = np.array(multi_agent_phenomenons_discovered)
     single_agent_phenomenons_discovered = np.array(single_agent_phenomenons_discovered)
 
+    diff_array = np.abs(
+        multi_agent_phenomenons_discovered - single_agent_phenomenons_discovered
+    )
+    max_diff = np.max(diff_array)
+    sample_to_visualize = np.random.choice(np.flatnonzero(diff_array == max_diff))
+
     print(
         f"Single-agent steps: {np.mean(single_agent_steps)} +/- {np.std(single_agent_steps)}"
     )
@@ -276,4 +286,142 @@ if __name__ == "__main__":
     print(
         "Multi-agent phenomenons discovered: "
         f"{np.mean(multi_agent_phenomenons_discovered)} +/- {np.std(multi_agent_phenomenons_discovered)}"
+    )
+
+    # Now we visualize the paths of the agents for a given sample
+
+    logging.info("Going to visualize the sample : %d", sample_to_visualize)
+
+    rows, cols = (
+        statistics.rows,
+        statistics.cols,
+    )
+    max_gps, num_agents, mission_duration, communication_range = (
+        statistics.max_gps,
+        statistics.num_agents,
+        statistics.mission_duration,
+        statistics.communication_range,
+    )
+    gp_locations = statistics.stats[sample_to_visualize].gp_locations
+    agent_locations = statistics.stats[sample_to_visualize].agent_locations
+
+    maze = None
+    if "maze" in args.results_pkl:
+        maze = load_mapf_map(
+            os.path.join(
+                os.path.dirname(os.path.abspath(__file__)),
+                "../data/maps/maze-32-32-4.map",
+            )
+        )
+    elif "dense" in args.results_pkl:
+        maze = load_mapf_map(
+            os.path.join(
+                os.path.dirname(os.path.abspath(__file__)),
+                "../data/maps/den312d.map",
+            )
+        )
+
+    params = Parameters(
+        theta_1=np.float64(0.4),
+        theta_2=np.float64(0.01),
+        u_tilde=np.float64(1.4),
+        P_1=np.float64(0.98),
+        P_2=np.float64(0.002),
+        J=np.int64(5),
+        measurement_noise=np.float64(0.2),
+        distance_simplification=True,
+    )
+
+    grid, reward_map = generate_map(
+        rows,
+        cols,
+        grid=maze,
+        agent_locations=agent_locations,
+        gp_means=np.ones(len(gp_locations)).tolist(),
+        gp_locations=gp_locations,
+        parameters=params,
+    )
+
+    x = np.linspace(-1, reward_map.num_of_rows, 1000)
+    y = np.linspace(-1, reward_map.num_of_cols, 1000)
+    xx, yy = np.meshgrid(x, y)
+    meshgrid = np.dstack((xx, yy))
+    zz = np.zeros_like(xx)
+    for i in range(len(reward_map.locations)):
+        linear_location = reward_map.locations[i]
+        location_coord = reward_map.get_coordinate(linear_location)
+        gaussian = reward_map.means[i] * multivariate_normal.pdf(
+            meshgrid, mean=location_coord, cov=1
+        )
+        zz += gaussian
+    zz /= np.max(zz)
+
+    agent_colors = "gbrkymcw"
+
+    vulcan_agents_paths = []
+    for agent_idx in range(len(agent_locations)):
+        multi_agent_vulcan_path = (
+            statistics.stats[sample_to_visualize].multi_agent_stats[agent_idx].path
+        )
+
+        plt.plot(
+            [x[0] for x in multi_agent_vulcan_path],
+            [x[1] for x in multi_agent_vulcan_path],
+            agent_colors[agent_idx] + "--",
+            alpha=0.7,
+        )
+        plt.plot(
+            agent_locations[agent_idx][0],
+            agent_locations[agent_idx][1],
+            agent_colors[agent_idx] + "x",
+        )
+        vulcan_agents_paths.append(multi_agent_vulcan_path)
+
+    plt.imshow(
+        zz, extent=(-1, reward_map.num_of_rows, reward_map.num_of_cols, -1), cmap="hot"
+    )
+
+    filename = figures_base_path + "ma-vulcan-" + args.results_pkl[:-4]
+    plt.savefig(filename + ".png")
+
+    visualize_path(
+        vulcan_agents_paths,
+        reward_map,
+        filename + ".gif",
+        [xx, yy, zz],
+        save_fig=True,
+    )
+
+    vulcan_agents_paths = []
+    for agent_idx in range(len(agent_locations)):
+        single_agent_vulcan_path = (
+            statistics.stats[sample_to_visualize].single_agent_stats[agent_idx].path
+        )
+
+        plt.plot(
+            [x[0] for x in single_agent_vulcan_path],
+            [x[1] for x in single_agent_vulcan_path],
+            agent_colors[agent_idx] + "--",
+            alpha=0.7,
+        )
+        plt.plot(
+            agent_locations[agent_idx][0],
+            agent_locations[agent_idx][1],
+            agent_colors[agent_idx] + "x",
+        )
+        vulcan_agents_paths.append(single_agent_vulcan_path)
+
+    plt.imshow(
+        zz, extent=(-1, reward_map.num_of_rows, reward_map.num_of_cols, -1), cmap="hot"
+    )
+
+    filename = figures_base_path + "sa-vulcan-" + args.results_pkl[:-4]
+    plt.savefig(filename + ".png")
+
+    visualize_path(
+        vulcan_agents_paths,
+        reward_map,
+        filename + ".gif",
+        [xx, yy, zz],
+        save_fig=True,
     )

@@ -3,9 +3,7 @@ import sys
 import pickle
 import logging
 import numpy as np
-import multiprocessing
 from copy import deepcopy
-from pympler import asizeof
 from numpy.typing import NDArray
 from dataclasses import dataclass
 from argparse import ArgumentParser
@@ -330,6 +328,51 @@ def execute_sample(parameter: Dict[str, Any], sample_id: int) -> SampleStats:
 
         sample_stats.single_agent_stats.append(vulcan_agent_stats)
 
+    filename = (
+        parameter["results_base_path"] + "results_" + parameter["map_type"] + ".pkl"
+    )
+    if not os.path.isfile(filename):
+        statistics = Statistics(
+            rows=parameter["rows"],
+            cols=parameter["cols"],
+            max_gps=parameter["max_gps"],
+            num_agents=parameter["num_agents"],
+            mission_duration=parameter["mission_duration"],
+            communication_range=parameter["communication_range"],
+            stats=[sample_stats],
+        )
+        with open(
+            parameter["results_base_path"]
+            + "results_"
+            + parameter["map_type"]
+            + ".pkl",
+            "wb",
+        ) as f:
+            pickle.dump(statistics, f)
+        logging.info("Results saved. Size of results: %d", len(statistics.stats))
+
+    else:
+        with open(
+            parameter["results_base_path"]
+            + "results_"
+            + parameter["map_type"]
+            + ".pkl",
+            "rb",
+        ) as f:
+            statistics = pickle.load(f)
+            statistics.stats.append(sample_stats)
+        with open(
+            parameter["results_base_path"]
+            + "results_"
+            + parameter["map_type"]
+            + ".pkl",
+            "wb",
+        ) as f:
+            pickle.dump(statistics, f)
+        logging.info(
+            "Results loaded and saved. Size of results: %d", len(statistics.stats)
+        )
+
     return sample_stats
 
 
@@ -382,34 +425,13 @@ if __name__ == "__main__":
         "cols": cols,
         "max_gps": max_gps,
         "num_agents": num_agents,
+        "map_type": args.map_type,
         "mission_duration": mission_duration,
+        "results_base_path": results_base_path,
         "communication_range": communication_range,
     }
-    results = []
-
-    # multiprocessing.set_start_method("fork")
-    # # Run the outer loop for 100 iterations
-    # with multiprocessing.Pool(processes=multiprocessing.cpu_count() // 2) as pool:
-    #     results = pool.starmap(
-    #         execute_sample, [(arguments, i) for i in range(NUM_SAMPLES)]
-    #     )
 
     for i in range(NUM_SAMPLES):
-        results.append(execute_sample(arguments, i))
+        execute_sample(arguments, i)
 
-    statistics = Statistics(
-        rows=rows,
-        cols=cols,
-        max_gps=max_gps,
-        num_agents=num_agents,
-        mission_duration=mission_duration,
-        communication_range=communication_range,
-        stats=results,
-    )
-
-    print(asizeof.asizeof(statistics))
-
-    with open(results_base_path + "results_" + args.map_type + ".pkl", "wb") as f:
-        pickle.dump(statistics, f)
-
-    print("Results saved")
+    print("All results saved")
