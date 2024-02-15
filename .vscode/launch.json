@@ -31,7 +31,7 @@
             },
             "args": [
                 "--type",
-                "single-small",
+                "multi-large",
                 "--measurement_noise",
                 "0.2",
                 "--logging_level",

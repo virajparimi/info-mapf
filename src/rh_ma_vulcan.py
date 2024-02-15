@@ -280,6 +280,10 @@ class MultiAgentVulcan(object):
         :param planning_horizon: Planning horizon k + h
         :param shared_observations: List of shared observations between the agents inside the communication range
         """
+        # logging.debug(
+        #     "Constructing a multi-agent search node for action prefixes:"
+        #     + str(action_prefixes)
+        # )
         agents_future_measurements = None
         node = MultiAgentSearchNode(parent, action_prefixes, agent_locations)
         if parent is not None:
@@ -573,7 +577,7 @@ class MultiAgentVulcan(object):
             current = open_set.get()
             self.nodes_expanded += 1
 
-            if current._f < best_gain:
+            if current._f <= best_gain and current.timestep < planning_horizon:
                 logging.debug("Size of the open set: " + str(open_set.qsize()))
                 logging.debug("Best action: " + str(best_action))
                 return best_gain, best_action
@@ -677,12 +681,6 @@ class MultiAgentVulcan(object):
                         planning_horizon,
                         shared_observations,
                     )
-
-                    if (
-                        np.greater(child_node.g, best_gain)
-                        and child_node.timestep >= planning_horizon
-                    ):
-                        best_gain = child_node.g
 
                     open_set.put(child_node)
 
