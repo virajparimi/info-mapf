@@ -1,6 +1,7 @@
 import numpy as np
 from warnings import warn
 from scipy.special import erf
+from scipy.linalg import solve
 from typing import List, Tuple
 from numpy.typing import NDArray
 from utils import positive_definite_matrix
@@ -57,19 +58,33 @@ class MarkovDecisionProcess(object):
             observation_locations, observation_locations
         )
 
-        inverse_term = np.linalg.inv(
-            covariance_observations + np.eye(len(observations)) * np.power(0.01, 2)
-        )
+        # inverse_term = np.linalg.inv(
+        #     covariance_observations + np.eye(len(observations)) * np.power(0.01, 2)
+        # )
 
-        mean = mean_of_futures + covariance_futures_observations @ inverse_term @ (
+        # mean = mean_of_futures + covariance_futures_observations @ inverse_term @ (
+        #     np.array(observation_measurements)
+        #     - reward_map.mean_function(observation_locations)
+        # )
+        # covariance = (
+        #     covariance_of_futures
+        #     - covariance_futures_observations
+        #     @ inverse_term
+        #     @ covariance_futures_observations.T
+        # )
+
+        speed_up_term = solve(
+            covariance_observations + np.eye(len(observations)) * np.power(0.01, 2),
+            covariance_futures_observations.T,
+            assume_a="pos",
+        ).T
+
+        mean = mean_of_futures + speed_up_term @ (
             np.array(observation_measurements)
             - reward_map.mean_function(observation_locations)
         )
-        covariance = (
-            covariance_of_futures
-            - covariance_futures_observations
-            @ inverse_term
-            @ covariance_futures_observations.T
+        covariance = covariance_of_futures - (
+            speed_up_term @ covariance_futures_observations.T
         )
 
         if not positive_definite_matrix(covariance):
@@ -110,21 +125,37 @@ class MarkovDecisionProcess(object):
             observation_locations, observation_locations
         )
 
-        inverse_term = np.linalg.inv(
+        # inverse_term = np.linalg.inv(
+        #     covariance_observations
+        #     + np.eye(len(observations))
+        #     * np.power(reward_map.params.measurement_noise, 2)
+        # )
+
+        # mean = mean_of_futures + covariance_futures_observations @ inverse_term @ (
+        #     np.array(observation_measurements)
+        #     - reward_map.mean_function(observation_locations)
+        # )
+        # covariance = (
+        #     covariance_of_futures
+        #     - covariance_futures_observations
+        #     @ inverse_term
+        #     @ covariance_futures_observations.T
+        # )
+
+        speed_up_term = solve(
             covariance_observations
             + np.eye(len(observations))
-            * np.power(reward_map.params.measurement_noise, 2)
-        )
+            * np.power(reward_map.params.measurement_noise, 2),
+            covariance_futures_observations.T,
+            assume_a="pos",
+        ).T
 
-        mean = mean_of_futures + covariance_futures_observations @ inverse_term @ (
+        mean = mean_of_futures + speed_up_term @ (
             np.array(observation_measurements)
             - reward_map.mean_function(observation_locations)
         )
-        covariance = (
-            covariance_of_futures
-            - covariance_futures_observations
-            @ inverse_term
-            @ covariance_futures_observations.T
+        covariance = covariance_of_futures - (
+            speed_up_term @ covariance_futures_observations.T
         )
 
         if not positive_definite_matrix(covariance):

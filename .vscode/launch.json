@@ -33,7 +33,9 @@
                 "--type",
                 "single-small",
                 "--measurement_noise",
-                "0.2"
+                "0.2",
+                "--logging_level",
+                "debug"
             ],
             "console": "integratedTerminal",
             "justMyCode": true
@@ -48,7 +50,7 @@
             },
             "args": [
                 "--map_type",
-                "empty-16",
+                "empty-32",
                 "--logging_level",
                 "debug",
             ],

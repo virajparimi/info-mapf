@@ -346,10 +346,9 @@ class MultiAgentVulcan(object):
 
                     node.h = np.add(node.h, best_reward)
 
-                    if node.parent is not None:
-                        node.parent.cached_h_values[agent_in_comm_range.id].update(
-                            {dict_key: best_reward}
-                        )
+                    node.cached_h_values[agent_in_comm_range.id].update(
+                        {dict_key: best_reward}
+                    )
 
         self.nodes_generated += 1
         return node
