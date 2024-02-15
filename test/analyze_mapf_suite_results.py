@@ -6,6 +6,7 @@ import numpy as np
 from numpy.typing import NDArray
 from argparse import ArgumentParser
 from matplotlib import pyplot as plt
+from scipy.interpolate import interp2d
 from typing import List, Tuple, Any, Union
 from scipy.stats import multivariate_normal
 from matplotlib.animation import FuncAnimation
@@ -28,11 +29,26 @@ def visualize_path(
 ):
     fig, ax = plt.subplots()
     if map_viz is not None:
-        ax.imshow(
-            zz,
-            extent=(-1, reward_map.num_of_rows, reward_map.num_of_cols, -1),
-            cmap="hot",
-        )
+        if len(map_viz) == 1:
+            ax.imshow(
+                map_viz[0],
+                extent=(-1, reward_map.num_of_rows + 1, reward_map.num_of_cols + 1, -1),
+                cmap="hot",
+            )
+        else:
+            ax.imshow(
+                map_viz[0],
+                extent=(-1, reward_map.num_of_rows + 1, reward_map.num_of_cols + 1, -1),
+                cmap="hot",
+                alpha=0.7,
+            )
+            ax.imshow(
+                map_viz[1],
+                extent=(-1, reward_map.num_of_rows + 1, reward_map.num_of_cols + 1, -1),
+                cmap="binary",
+                alpha=0.5,
+            )
+
     else:
         ax.imshow(reward_map.reward_map, cmap="hot")
 
@@ -342,8 +358,8 @@ if __name__ == "__main__":
         parameters=params,
     )
 
-    x = np.linspace(-1, reward_map.num_of_rows, 1000)
-    y = np.linspace(-1, reward_map.num_of_cols, 1000)
+    x = np.linspace(-1, reward_map.num_of_rows + 1, 1000)
+    y = np.linspace(-1, reward_map.num_of_cols + 1, 1000)
     xx, yy = np.meshgrid(x, y)
     meshgrid = np.dstack((xx, yy))
     zz = np.zeros_like(xx)
@@ -377,8 +393,24 @@ if __name__ == "__main__":
         )
         vulcan_agents_paths.append(multi_agent_vulcan_path)
 
+    if maze is not None:
+        x_obstacle = np.linspace(-1, reward_map.num_of_rows + 1, maze.shape[0])
+        y_obstacle = np.linspace(-1, reward_map.num_of_rows + 1, maze.shape[1])
+
+        obstacles_interpolated = interp2d(x_obstacle, y_obstacle, maze, kind="linear")
+        zz_obstacle = obstacles_interpolated(x, y)
+
+        plt.imshow(
+            zz_obstacle,
+            extent=(-1, reward_map.num_of_rows + 1, reward_map.num_of_cols + 1, -1),
+            cmap="binary",
+            alpha=0.5,
+        )
     plt.imshow(
-        zz, extent=(-1, reward_map.num_of_rows, reward_map.num_of_cols, -1), cmap="hot"
+        zz,
+        extent=(-1, reward_map.num_of_rows + 1, reward_map.num_of_cols + 1, -1),
+        cmap="hot",
+        alpha=0.7,
     )
 
     filename = figures_base_path + "ma-vulcan-" + args.results_pkl[:-4]
@@ -388,7 +420,7 @@ if __name__ == "__main__":
         vulcan_agents_paths,
         reward_map,
         filename + ".gif",
-        [xx, yy, zz],
+        [zz, zz_obstacle] if maze is not None else [zz],
         save_fig=True,
     )
 
@@ -411,8 +443,18 @@ if __name__ == "__main__":
         )
         vulcan_agents_paths.append(single_agent_vulcan_path)
 
+    if maze is not None:
+        plt.imshow(
+            zz_obstacle,
+            extent=(-1, reward_map.num_of_rows + 1, reward_map.num_of_cols + 1, -1),
+            cmap="binary",
+            alpha=0.5,
+        )
     plt.imshow(
-        zz, extent=(-1, reward_map.num_of_rows, reward_map.num_of_cols, -1), cmap="hot"
+        zz,
+        extent=(-1, reward_map.num_of_rows + 1, reward_map.num_of_cols + 1, -1),
+        cmap="hot",
+        alpha=0.7,
     )
 
     filename = figures_base_path + "sa-vulcan-" + args.results_pkl[:-4]
@@ -422,6 +464,6 @@ if __name__ == "__main__":
         vulcan_agents_paths,
         reward_map,
         filename + ".gif",
-        [xx, yy, zz],
+        [zz, zz_obstacle] if maze is not None else [zz],
         save_fig=True,
     )

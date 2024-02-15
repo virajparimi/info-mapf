@@ -31,7 +31,7 @@
             },
             "args": [
                 "--type",
-                "multi-large",
+                "single-small",
                 "--measurement_noise",
                 "0.2"
             ],
