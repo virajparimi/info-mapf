@@ -26,6 +26,7 @@ class MultiAgentSearchNode(object):
         self.action_prefixes = agents_actions
         self.agent_locations = agent_locations
         self.cached_h_values = {agent: {} for agent in agent_locations.keys()}
+        self.agent_action_h = {agent: {} for agent in agent_locations.keys()}
 
         self._g = np.float64(0.0)
         self._h = np.float64(0.0)
@@ -161,6 +162,11 @@ class MultiAgentVulcan(object):
                                 ]
                                 skip_agent[agent_in_comm_range.id] = True
 
+                    logging.debug(
+                        "Ratio of nodes expanded to nodes generated: "
+                        + str(self.nodes_expanded / self.nodes_generated)
+                    )
+
                 elif not skip_agent[agent.id]:
                     # Re-use vulcan for this single agent
                     horizon = min(
@@ -280,6 +286,10 @@ class MultiAgentVulcan(object):
         :param planning_horizon: Planning horizon k + h
         :param shared_observations: List of shared observations between the agents inside the communication range
         """
+        # logging.debug(
+        #     "Constructing a multi-agent search node for action prefixes:"
+        #     + str(action_prefixes)
+        # )
         agents_future_measurements = None
         node = MultiAgentSearchNode(parent, action_prefixes, agent_locations)
         if parent is not None:
@@ -334,7 +344,7 @@ class MultiAgentVulcan(object):
                     )
                 else:
 
-                    best_reward, _ = agent_in_comm_range.extract_action(
+                    action_rewards, actions = agent_in_comm_range.extract_action(
                         agent_locations[agent_in_comm_range.id],
                         node.timestep,
                         planning_horizon - node.timestep,
@@ -342,14 +352,33 @@ class MultiAgentVulcan(object):
                         recursive_grid_object,
                         agent_in_comm_range.reward_map,
                         agents_future_measurements,
+                        extract_all_actions=True,
                     )
 
+                    assert isinstance(actions, list)
+                    assert isinstance(action_rewards, np.ndarray)
+
+                    action_rewards_mapping = {
+                        action.action_type.value: action_rewards[idx]
+                        for idx, action in enumerate(actions)
+                    }
+                    action_rewards_mapping = dict(
+                        sorted(
+                            action_rewards_mapping.items(),
+                            key=lambda x: x[1],
+                            reverse=True,
+                        )
+                    )
+
+                    best_reward = np.max(action_rewards)
                     node.h = np.add(node.h, best_reward)
 
-                    if node.parent is not None:
-                        node.parent.cached_h_values[agent_in_comm_range.id].update(
-                            {dict_key: best_reward}
-                        )
+                    node.cached_h_values[agent_in_comm_range.id].update(
+                        {dict_key: best_reward}
+                    )
+                    node.agent_action_h[agent_in_comm_range.id].update(
+                        action_rewards_mapping
+                    )
 
         self.nodes_generated += 1
         return node
@@ -574,7 +603,7 @@ class MultiAgentVulcan(object):
             current = open_set.get()
             self.nodes_expanded += 1
 
-            if current._f < best_gain:
+            if current._f <= best_gain and current.timestep < planning_horizon:
                 logging.debug("Size of the open set: " + str(open_set.qsize()))
                 logging.debug("Best action: " + str(best_action))
                 return best_gain, best_action
@@ -618,6 +647,7 @@ class MultiAgentVulcan(object):
                         valid_actions.add(valid_neighbor.action_type.value)
                 valid_actions = list(valid_actions)
 
+                child_best_gain = np.float64(0.0)
                 for action_prefixes in current.extract_action_prefix_extensions(
                     valid_actions
                 ):
@@ -670,6 +700,22 @@ class MultiAgentVulcan(object):
                     if invalid_action_prefix:
                         continue
 
+                    # Pruning the nodes before generation!
+                    if current.timestep + 1 >= planning_horizon:
+                        temp_h_val = np.float64(0.0)
+                        for agent_in_comm_range in agent_bubbles:
+                            action = action_prefixes[agent_in_comm_range.id][-1]
+                            if action in current.agent_action_h[agent_in_comm_range.id]:
+                                temp_h_val = np.add(
+                                    temp_h_val,
+                                    current.agent_action_h[agent_in_comm_range.id][
+                                        action
+                                    ],
+                                )
+                        temp_f_val = current.g + temp_h_val
+                        if temp_f_val <= child_best_gain:
+                            continue
+
                     child_node = self.construct_node(
                         current,
                         action_prefixes,
@@ -679,11 +725,13 @@ class MultiAgentVulcan(object):
                         shared_observations,
                     )
 
-                    if (
-                        np.greater(child_node.g, best_gain)
-                        and child_node.timestep >= planning_horizon
-                    ):
-                        best_gain = child_node.g
+                    if child_node.timestep >= planning_horizon:
+                        assert child_node._f <= current._f or np.isclose(
+                            child_node._f, current._f
+                        )
+
+                    if child_node._f > child_best_gain:
+                        child_best_gain = child_node._f
 
                     open_set.put(child_node)
 

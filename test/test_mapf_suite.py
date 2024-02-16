@@ -23,6 +23,7 @@ class SampleStats:
     gp_locations: List[Tuple[int, int]]
     multi_agent_stats: List[VulcanStats]
     single_agent_stats: List[VulcanStats]
+    single_agent_collision_avoidance_stats: List[VulcanStats]
     agent_locations: List[Tuple[int, int]]
 
 
@@ -44,6 +45,7 @@ sys.path.append(os.path.join(os.path.dirname(os.path.dirname(__file__)), "src"))
 from agent import Agent  # NOQA
 from utils import generate_map  # NOQA
 from rh_ma_vulcan import MultiAgentVulcan  # NOQA
+from rh_sa_vulcan import SingleAgentVulcan  # NOQA
 from map import Grid, RewardMap, Parameters  # NOQA
 
 
@@ -266,6 +268,7 @@ def execute_sample(parameter: Dict[str, Any], sample_id: int) -> SampleStats:
         nodes_generated=0,
         multi_agent_stats=[],
         single_agent_stats=[],
+        single_agent_collision_avoidance_stats=[],
         gp_locations=gp_locations,
         agent_locations=agent_locations,
     )
@@ -328,6 +331,38 @@ def execute_sample(parameter: Dict[str, Any], sample_id: int) -> SampleStats:
 
         sample_stats.single_agent_stats.append(vulcan_agent_stats)
 
+    """
+    At this point multi-agent vulcan and single-agent vulcan without collision avoidance has been run.
+    Now need to run single agent vulcan with collision avoidance
+    """
+
+    vulcan_agents, vulcan_grid = setup_vulcan_agents(
+        agent_locations, grid, reward_map, parameter["mission_duration"]
+    )
+
+    logging.info("Running single-agent with collision avoidance vulcan")
+    rh_sa_vulcan = SingleAgentVulcan(
+        grid=vulcan_grid,
+        reward_map=reward_map,
+        agents=vulcan_agents,
+    )
+    rh_sa_vulcan.planner()
+
+    # Extract the paths of the agents after running multi-agent vulcan
+    for idx, agent in enumerate(vulcan_agents):
+        vulcan_agent_stats = VulcanStats(
+            path=[],
+            phenomenons_discovered=set(),
+        )
+        for v_location in agent.visited_locations:
+            v_coord = vulcan_grid.get_coordinate(v_location)
+            v_coord_compare = (v_coord[0], v_coord[1])
+            if v_coord_compare in gp_locations:
+                vulcan_agent_stats.phenomenons_discovered.add(v_coord_compare)
+            vulcan_agent_stats.path.append(v_coord)
+
+        sample_stats.single_agent_collision_avoidance_stats.append(vulcan_agent_stats)
+
     filename = (
         parameter["results_base_path"] + "results_" + parameter["map_type"] + ".pkl"
     )
@@ -342,10 +377,7 @@ def execute_sample(parameter: Dict[str, Any], sample_id: int) -> SampleStats:
             stats=[sample_stats],
         )
         with open(
-            parameter["results_base_path"]
-            + "results_"
-            + parameter["map_type"]
-            + ".pkl",
+            filename,
             "wb",
         ) as f:
             pickle.dump(statistics, f)
@@ -353,19 +385,13 @@ def execute_sample(parameter: Dict[str, Any], sample_id: int) -> SampleStats:
 
     else:
         with open(
-            parameter["results_base_path"]
-            + "results_"
-            + parameter["map_type"]
-            + ".pkl",
+            filename,
             "rb",
         ) as f:
             statistics = pickle.load(f)
             statistics.stats.append(sample_stats)
         with open(
-            parameter["results_base_path"]
-            + "results_"
-            + parameter["map_type"]
-            + ".pkl",
+            filename,
             "wb",
         ) as f:
             pickle.dump(statistics, f)
@@ -377,7 +403,9 @@ def execute_sample(parameter: Dict[str, Any], sample_id: int) -> SampleStats:
 
 
 if __name__ == "__main__":
-    results_base_path = os.path.dirname(os.path.abspath(__file__)) + "/../data/testing/"
+    results_base_path = (
+        os.path.dirname(os.path.abspath(__file__)) + "/../data/updated_ablations/"
+    )
     parser = ArgumentParser()
     parser.add_argument(
         "--map_type",
@@ -431,7 +459,17 @@ if __name__ == "__main__":
         "communication_range": communication_range,
     }
 
-    for i in range(NUM_SAMPLES):
+    start = 0
+    filename = results_base_path + "results_" + args.map_type + ".pkl"
+    if os.path.isfile(filename):
+        with open(
+            filename,
+            "rb",
+        ) as f:
+            statistics = pickle.load(f)
+            start = len(statistics.stats)
+
+    for i in range(start, NUM_SAMPLES):
         execute_sample(arguments, i)
 
     print("All results saved")
