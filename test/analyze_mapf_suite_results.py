@@ -372,7 +372,7 @@ if __name__ == "__main__":
         zz += gaussian
     zz /= np.max(zz)
 
-    agent_colors = "gbrkymcw"
+    agent_colors = ["g", "b", "r", "deeppink", "y", "m", "c", "w"]
 
     vulcan_agents_paths = []
     for agent_idx in range(len(agent_locations)):
@@ -383,13 +383,15 @@ if __name__ == "__main__":
         plt.plot(
             [x[0] for x in multi_agent_vulcan_path],
             [x[1] for x in multi_agent_vulcan_path],
-            agent_colors[agent_idx] + "--",
+            color=agent_colors[agent_idx],
+            linestyle="--",
             alpha=0.7,
         )
         plt.plot(
             agent_locations[agent_idx][0],
             agent_locations[agent_idx][1],
-            agent_colors[agent_idx] + "x",
+            color=agent_colors[agent_idx],
+            marker="x",
         )
         vulcan_agents_paths.append(multi_agent_vulcan_path)
 
@@ -433,13 +435,15 @@ if __name__ == "__main__":
         plt.plot(
             [x[0] for x in single_agent_vulcan_path],
             [x[1] for x in single_agent_vulcan_path],
-            agent_colors[agent_idx] + "--",
+            color=agent_colors[agent_idx],
+            linestyle="--",
             alpha=0.7,
         )
         plt.plot(
             agent_locations[agent_idx][0],
             agent_locations[agent_idx][1],
-            agent_colors[agent_idx] + "x",
+            color=agent_colors[agent_idx],
+            marker="x",
         )
         vulcan_agents_paths.append(single_agent_vulcan_path)
 
