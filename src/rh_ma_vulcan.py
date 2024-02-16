@@ -655,7 +655,6 @@ class MultiAgentVulcan(object):
                     # Validate whether the action prefix can be executed
                     next_locations = {}
                     invalid_action_prefix = False
-                    temp_h_val = np.float64(0.0)
                     for agent_idx, agent_in_comm_range in enumerate(agent_bubbles):
                         action = action_prefixes[agent_in_comm_range.id][-1]
                         next_pos = current.grid.extract_next_location(
@@ -675,10 +674,6 @@ class MultiAgentVulcan(object):
                             break
 
                         next_locations[agent_in_comm_range.id] = next_pos
-                        temp_h_val = np.add(
-                            temp_h_val,
-                            current.agent_action_h[agent_in_comm_range.id][action],
-                        )
 
                     if invalid_action_prefix:
                         continue
@@ -707,6 +702,16 @@ class MultiAgentVulcan(object):
 
                     # Pruning the nodes before generation!
                     if current.timestep + 1 >= planning_horizon:
+                        temp_h_val = np.float64(0.0)
+                        for agent_in_comm_range in agent_bubbles:
+                            action = action_prefixes[agent_in_comm_range.id][-1]
+                            if action in current.agent_action_h[agent_in_comm_range.id]:
+                                temp_h_val = np.add(
+                                    temp_h_val,
+                                    current.agent_action_h[agent_in_comm_range.id][
+                                        action
+                                    ],
+                                )
                         temp_f_val = current.g + temp_h_val
                         if temp_f_val <= child_best_gain:
                             continue

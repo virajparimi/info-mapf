@@ -67,8 +67,8 @@ def visualize_path(
 
     def update(frame):
         for i, path in enumerate(paths):
-            x_data = [point[1] for point in path[: frame + 1]]
-            y_data = [point[0] for point in path[: frame + 1]]
+            x_data = [point[0] for point in path[: frame + 1]]
+            y_data = [point[1] for point in path[: frame + 1]]
             lines[i].set_data(x_data, y_data)
         return lines
 
@@ -88,9 +88,11 @@ def validate_paths(
     agent_j: Tuple[int, List[NDArray[np.int64]]],
     mission_duration: int,
     multi: bool = True,
+    single_ca: bool = False,
 ) -> int:
 
     string = "Multi-agent" if multi else "Single-agent"
+    string = "Single-agent with collision avoidance" if single_ca else string
 
     agent_i_id, path_i = agent_i
     agent_j_id, path_j = agent_j
@@ -256,6 +258,7 @@ if __name__ == "__main__":
                         ),
                         mission_duration,
                         False,
+                        True,
                     ),
                 )
                 single_ca_collision = (
@@ -339,7 +342,7 @@ if __name__ == "__main__":
 
         if (
             len(sample_single_agent_ca_phenomenons_discovered) != len(gp_locations)
-            or single_collision
+            or single_ca_collision
         ):
             single_agent_ca_steps.append(mission_duration)
         else:
@@ -498,6 +501,7 @@ if __name__ == "__main__":
     filename = figures_base_path + "ma-vulcan-" + args.results_pkl[:-4]
     plt.savefig(filename + ".png")
 
+    plt.clf()
     visualize_path(
         vulcan_agents_paths,
         reward_map,
@@ -505,6 +509,7 @@ if __name__ == "__main__":
         [zz, zz_obstacle] if maze is not None else [zz],
         save_fig=True,
     )
+    plt.clf()
 
     vulcan_agents_paths = []
     for agent_idx in range(len(agent_locations)):
@@ -543,6 +548,7 @@ if __name__ == "__main__":
 
     filename = figures_base_path + "sa-vulcan-" + args.results_pkl[:-4]
     plt.savefig(filename + ".png")
+    plt.clf()
 
     visualize_path(
         vulcan_agents_paths,
@@ -551,6 +557,7 @@ if __name__ == "__main__":
         [zz, zz_obstacle] if maze is not None else [zz],
         save_fig=True,
     )
+    plt.clf()
 
     vulcan_agents_paths = []
     for agent_idx in range(len(agent_locations)):
@@ -591,6 +598,7 @@ if __name__ == "__main__":
 
     filename = figures_base_path + "sa-ca-vulcan-" + args.results_pkl[:-4]
     plt.savefig(filename + ".png")
+    plt.clf()
 
     visualize_path(
         vulcan_agents_paths,
@@ -599,3 +607,4 @@ if __name__ == "__main__":
         [zz, zz_obstacle] if maze is not None else [zz],
         save_fig=True,
     )
+    plt.clf()

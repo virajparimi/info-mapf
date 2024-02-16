@@ -377,10 +377,7 @@ def execute_sample(parameter: Dict[str, Any], sample_id: int) -> SampleStats:
             stats=[sample_stats],
         )
         with open(
-            parameter["results_base_path"]
-            + "results_"
-            + parameter["map_type"]
-            + ".pkl",
+            filename,
             "wb",
         ) as f:
             pickle.dump(statistics, f)
@@ -388,19 +385,13 @@ def execute_sample(parameter: Dict[str, Any], sample_id: int) -> SampleStats:
 
     else:
         with open(
-            parameter["results_base_path"]
-            + "results_"
-            + parameter["map_type"]
-            + ".pkl",
+            filename,
             "rb",
         ) as f:
             statistics = pickle.load(f)
             statistics.stats.append(sample_stats)
         with open(
-            parameter["results_base_path"]
-            + "results_"
-            + parameter["map_type"]
-            + ".pkl",
+            filename,
             "wb",
         ) as f:
             pickle.dump(statistics, f)
@@ -468,7 +459,17 @@ if __name__ == "__main__":
         "communication_range": communication_range,
     }
 
-    for i in range(NUM_SAMPLES):
+    start = 0
+    filename = results_base_path + "results_" + args.map_type + ".pkl"
+    if os.path.isfile(filename):
+        with open(
+            filename,
+            "rb",
+        ) as f:
+            statistics = pickle.load(f)
+            start = len(statistics.stats)
+
+    for i in range(start, NUM_SAMPLES):
         execute_sample(arguments, i)
 
     print("All results saved")
