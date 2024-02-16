@@ -340,7 +340,7 @@ def execute_sample(parameter: Dict[str, Any], sample_id: int) -> SampleStats:
         agent_locations, grid, reward_map, parameter["mission_duration"]
     )
 
-    logging.info("Running multi-agent vulcan")
+    logging.info("Running single-agent with collision avoidance vulcan")
     rh_sa_vulcan = SingleAgentVulcan(
         grid=vulcan_grid,
         reward_map=reward_map,
