@@ -116,30 +116,31 @@ class SingleAgentVulcan(object):
             if collision:
                 valid_actions = [ActionType.Wait.value for _ in self.agents]
 
+            # Once we have extracted the best actions for each agent, we execute them
+            old_locations = [agent.current_location for agent in self.agents]
+            old_locations_coords = [
+                self.grid.get_coordinate(location) for location in old_locations
+            ]
+            new_locations = []
             for agent in self.agents:
+                if valid_actions[agent.id] not in agent_next_locations[agent.id]:
+                    assert valid_actions[agent.id] == ActionType.Wait.value
+                    new_locations.append(agent.current_location)
+                else:
+                    new_locations.append(
+                        agent_next_locations[agent.id][valid_actions[agent.id]]
+                    )
+            new_locations_coords = [
+                self.grid.get_coordinate(location) for location in new_locations
+            ]
 
-                # Once we have extracted the best actions for each agent, we execute them
-                old_locations = [agent.current_location for agent in self.agents]
-                old_locations_coords = [
-                    self.grid.get_coordinate(location) for location in old_locations
-                ]
-                new_locations = [
-                    agent_next_locations[agent.id][valid_actions[agent.id]]
-                    for agent in self.agents
-                ]
-                new_locations_coords = [
-                    self.grid.get_coordinate(location) for location in new_locations
-                ]
+            for old_loc in old_locations_coords:
+                self.grid.grid[old_loc[0], old_loc[1]] = True
+            for new_loc in new_locations_coords:
+                self.grid.grid[new_loc[0], new_loc[1]] = False
 
-                for old_loc in old_locations_coords:
-                    self.grid.grid[old_loc[0], old_loc[1]] = True
-                for new_loc in new_locations_coords:
-                    self.grid.grid[new_loc[0], new_loc[1]] = False
-
-            for agent in self.agents:
-                agent.current_location = agent_next_locations[agent.id][
-                    valid_actions[agent.id]
-                ]
+            for idx, agent in enumerate(self.agents):
+                agent.current_location = new_locations[idx]
                 agent.visited_locations.append(agent.current_location)
                 agent.mdp_handle.update(agent.current_location, agent.reward_map)
                 agent.timer += 1

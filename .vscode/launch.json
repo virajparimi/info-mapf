@@ -50,9 +50,9 @@
             },
             "args": [
                 "--map_type",
-                "original",
-                // "--logging_level",
-                // "debug",
+                "empty-16",
+                "--logging_level",
+                "debug",
             ],
             "console": "integratedTerminal",
             "justMyCode": true
