@@ -121,7 +121,9 @@ def validate_paths(
 
 
 if __name__ == "__main__":
-    results_base_path = os.path.dirname(os.path.abspath(__file__)) + "/../data/testing/"
+    results_base_path = (
+        os.path.dirname(os.path.abspath(__file__)) + "/../data/updated_ablations/"
+    )
     figures_base_path = (
         os.path.dirname(os.path.abspath(__file__)) + "/../figures/testing/"
     )
@@ -156,11 +158,12 @@ if __name__ == "__main__":
 
     num_samples = len(statistics.stats)
 
-    multi_agent_steps, single_agent_steps = [], []
-    multi_agent_phenomenons_discovered, single_agent_phenomenons_discovered = (
-        [],
-        [],
-    )
+    multi_agent_steps, single_agent_steps, single_agent_ca_steps = [], [], []
+    (
+        multi_agent_phenomenons_discovered,
+        single_agent_phenomenons_discovered,
+        single_agent_ca_phenomenons_discovered,
+    ) = ([], [], [])
 
     mission_duration = statistics.mission_duration
     for sample in range(num_samples):
@@ -170,14 +173,20 @@ if __name__ == "__main__":
 
         sample_multi_agent_phenomenons_discovered = set()
         sample_single_agent_phenomenons_discovered = set()
+        sample_single_agent_ca_phenomenons_discovered = set()
 
         # Verify that the paths of agents do not lead to collisions!
-        multi_agent_last_valid_step, single_agent_last_valid_step = (
+        (
+            multi_agent_last_valid_step,
+            single_agent_last_valid_step,
+            single_agent_ca_last_valid_step,
+        ) = (
+            mission_duration,
             mission_duration,
             mission_duration,
         )
 
-        multi_collision, single_collision = False, False
+        multi_collision, single_collision, single_ca_collision = False, False, False
         for agent_i in range(len(agent_locations)):
             for agent_j in range(len(agent_locations)):
                 if agent_i == agent_j:
@@ -231,7 +240,39 @@ if __name__ == "__main__":
                     single_agent_last_valid_step, single_agent_paths_valid_steps[0]
                 )
 
-        multi_last_gp_found_step, single_last_gp_found_step = 0, 0
+                single_agent_ca_paths_valid_steps = (
+                    validate_paths(
+                        (
+                            agent_i,
+                            statistics.stats[sample]
+                            .single_agent_collision_avoidance_stats[agent_i]
+                            .path,
+                        ),
+                        (
+                            agent_j,
+                            statistics.stats[sample]
+                            .single_agent_collision_avoidance_stats[agent_j]
+                            .path,
+                        ),
+                        mission_duration,
+                        False,
+                    ),
+                )
+                single_ca_collision = (
+                    True
+                    if single_agent_ca_paths_valid_steps[0] < mission_duration
+                    else False
+                )
+                single_agent_ca_last_valid_step = min(
+                    single_agent_ca_last_valid_step,
+                    single_agent_ca_paths_valid_steps[0],
+                )
+
+        (
+            multi_last_gp_found_step,
+            single_last_gp_found_step,
+            single_ca_last_gp_found_step,
+        ) = (0, 0, 0)
         for step in range(multi_agent_last_valid_step):
             for agent in range(len(agent_locations)):
                 coord = statistics.stats[sample].multi_agent_stats[agent].path[step]
@@ -254,11 +295,30 @@ if __name__ == "__main__":
                     single_last_gp_found_step = step
                     sample_single_agent_phenomenons_discovered.add(coord_compare)
 
+        for step in range(single_agent_ca_last_valid_step):
+            for agent in range(len(agent_locations)):
+                coord = (
+                    statistics.stats[sample]
+                    .single_agent_collision_avoidance_stats[agent]
+                    .path[step]
+                )
+                coord_compare = (coord[0], coord[1])
+                if (
+                    coord_compare in gp_locations
+                    and coord_compare
+                    not in sample_single_agent_ca_phenomenons_discovered
+                ):
+                    single_ca_last_gp_found_step = step
+                    sample_single_agent_ca_phenomenons_discovered.add(coord_compare)
+
         multi_agent_phenomenons_discovered.append(
             len(sample_multi_agent_phenomenons_discovered)
         )
         single_agent_phenomenons_discovered.append(
             len(sample_single_agent_phenomenons_discovered)
+        )
+        single_agent_ca_phenomenons_discovered.append(
+            len(sample_single_agent_ca_phenomenons_discovered)
         )
 
         if (
@@ -277,11 +337,23 @@ if __name__ == "__main__":
         else:
             single_agent_steps.append(single_last_gp_found_step)
 
+        if (
+            len(sample_single_agent_ca_phenomenons_discovered) != len(gp_locations)
+            or single_collision
+        ):
+            single_agent_ca_steps.append(mission_duration)
+        else:
+            single_agent_ca_steps.append(single_ca_last_gp_found_step)
+
     # Compile the results and print them
     multi_agent_steps = np.array(multi_agent_steps)
     single_agent_steps = np.array(single_agent_steps)
+    single_agent_ca_steps = np.array(single_agent_ca_steps)
     multi_agent_phenomenons_discovered = np.array(multi_agent_phenomenons_discovered)
     single_agent_phenomenons_discovered = np.array(single_agent_phenomenons_discovered)
+    single_agent_ca_phenomenons_discovered = np.array(
+        single_agent_ca_phenomenons_discovered
+    )
 
     diff_array = np.abs(
         multi_agent_phenomenons_discovered - single_agent_phenomenons_discovered
@@ -293,11 +365,19 @@ if __name__ == "__main__":
         f"Single-agent steps: {np.mean(single_agent_steps)} +/- {np.std(single_agent_steps)}"
     )
     print(
+        "Single-agent with collision avoidance steps: "
+        f"{np.mean(single_agent_ca_steps)} +/- {np.std(single_agent_ca_steps)}"
+    )
+    print(
         f"Multi-agent steps: {np.mean(multi_agent_steps)} +/- {np.std(multi_agent_steps)}"
     )
     print(
         "Single-agent phenomenons discovered: "
         f"{np.mean(single_agent_phenomenons_discovered)} +/- {np.std(single_agent_phenomenons_discovered)}"
+    )
+    print(
+        "Single-agent with collision avoidance phenomenons discovered: "
+        f"{np.mean(single_agent_ca_phenomenons_discovered)} +/- {np.std(single_agent_ca_phenomenons_discovered)}"
     )
     print(
         "Multi-agent phenomenons discovered: "
@@ -462,6 +542,54 @@ if __name__ == "__main__":
     )
 
     filename = figures_base_path + "sa-vulcan-" + args.results_pkl[:-4]
+    plt.savefig(filename + ".png")
+
+    visualize_path(
+        vulcan_agents_paths,
+        reward_map,
+        filename + ".gif",
+        [zz, zz_obstacle] if maze is not None else [zz],
+        save_fig=True,
+    )
+
+    vulcan_agents_paths = []
+    for agent_idx in range(len(agent_locations)):
+        single_agent_ca_vulcan_path = (
+            statistics.stats[sample_to_visualize]
+            .single_agent_collision_avoidance_stats[agent_idx]
+            .path
+        )
+
+        plt.plot(
+            [x[0] for x in single_agent_ca_vulcan_path],
+            [x[1] for x in single_agent_ca_vulcan_path],
+            color=agent_colors[agent_idx],
+            linestyle="--",
+            alpha=0.7,
+        )
+        plt.plot(
+            agent_locations[agent_idx][0],
+            agent_locations[agent_idx][1],
+            color=agent_colors[agent_idx],
+            marker="x",
+        )
+        vulcan_agents_paths.append(single_agent_ca_vulcan_path)
+
+    if maze is not None:
+        plt.imshow(
+            zz_obstacle,
+            extent=(-1, reward_map.num_of_rows + 1, reward_map.num_of_cols + 1, -1),
+            cmap="binary",
+            alpha=0.5,
+        )
+    plt.imshow(
+        zz,
+        extent=(-1, reward_map.num_of_rows + 1, reward_map.num_of_cols + 1, -1),
+        cmap="hot",
+        alpha=0.7,
+    )
+
+    filename = figures_base_path + "sa-ca-vulcan-" + args.results_pkl[:-4]
     plt.savefig(filename + ".png")
 
     visualize_path(
