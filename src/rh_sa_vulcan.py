@@ -139,10 +139,8 @@ class SingleAgentVulcan(object):
             for new_loc in new_locations_coords:
                 self.grid.grid[new_loc[0], new_loc[1]] = False
 
-            for agent in self.agents:
-                agent.current_location = agent_next_locations[agent.id][
-                    valid_actions[agent.id]
-                ]
+            for idx, agent in enumerate(self.agents):
+                agent.current_location = new_locations[idx]
                 agent.visited_locations.append(agent.current_location)
                 agent.mdp_handle.update(agent.current_location, agent.reward_map)
                 agent.timer += 1
