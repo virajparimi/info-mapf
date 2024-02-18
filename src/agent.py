@@ -137,7 +137,7 @@ class Agent(object):
                         locations_to_consider,
                         reward_map,
                         indexed_observations,
-                        unobserved_phenomenon=False,
+                        unobserved_phenomenon=self.use_vulcan,
                     )
                 )
 

@@ -444,7 +444,7 @@ class MultiAgentVulcan(object):
                     locations_to_consider,
                     self.reward_map,
                     indexed_observations,
-                    unobserved_phenomenon=False,
+                    unobserved_phenomenon=use_vulcan,
                 )
             )
 

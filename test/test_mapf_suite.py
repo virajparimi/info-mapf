@@ -404,7 +404,7 @@ def execute_sample(parameter: Dict[str, Any], sample_id: int) -> SampleStats:
 
 if __name__ == "__main__":
     results_base_path = (
-        os.path.dirname(os.path.abspath(__file__)) + "/../data/updated_ablations/"
+        os.path.dirname(os.path.abspath(__file__)) + "/../data/all_observed_set/"
     )
     parser = ArgumentParser()
     parser.add_argument(

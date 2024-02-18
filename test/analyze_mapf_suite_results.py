@@ -124,7 +124,7 @@ def validate_paths(
 
 if __name__ == "__main__":
     results_base_path = (
-        os.path.dirname(os.path.abspath(__file__)) + "/../data/updated_ablations/"
+        os.path.dirname(os.path.abspath(__file__)) + "/../data/all_observed_set/"
     )
     figures_base_path = (
         os.path.dirname(os.path.abspath(__file__)) + "/../figures/testing/"
@@ -166,12 +166,18 @@ if __name__ == "__main__":
         single_agent_phenomenons_discovered,
         single_agent_ca_phenomenons_discovered,
     ) = ([], [], [])
+    ratios = []
 
     mission_duration = statistics.mission_duration
     for sample in range(num_samples):
 
         gp_locations = statistics.stats[sample].gp_locations
         agent_locations = statistics.stats[sample].agent_locations
+
+        num_expanded_nodes = statistics.stats[sample].nodes_expanded
+        num_generated_nodes = statistics.stats[sample].nodes_generated
+        ratio = num_expanded_nodes / num_generated_nodes
+        ratios.append(ratio)
 
         sample_multi_agent_phenomenons_discovered = set()
         sample_single_agent_phenomenons_discovered = set()
@@ -349,6 +355,7 @@ if __name__ == "__main__":
             single_agent_ca_steps.append(single_ca_last_gp_found_step)
 
     # Compile the results and print them
+    ratios = np.array(ratios)
     multi_agent_steps = np.array(multi_agent_steps)
     single_agent_steps = np.array(single_agent_steps)
     single_agent_ca_steps = np.array(single_agent_ca_steps)
@@ -385,6 +392,9 @@ if __name__ == "__main__":
     print(
         "Multi-agent phenomenons discovered: "
         f"{np.mean(multi_agent_phenomenons_discovered)} +/- {np.std(multi_agent_phenomenons_discovered)}"
+    )
+    print(
+        f"Ratio of expanded nodes to generated nodes: {np.mean(ratios)} +/- {np.std(ratios)}"
     )
 
     # Now we visualize the paths of the agents for a given sample
