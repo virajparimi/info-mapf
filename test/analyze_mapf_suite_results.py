@@ -66,14 +66,14 @@ def analyse_results(
 
     plt.imshow(
         map_viz[0],
-        extent=(-1, reward_map.num_of_cols + 1, reward_map.num_of_rows + 1, -1),
+        extent=(0, reward_map.num_of_cols, reward_map.num_of_rows, 0),
         cmap="hot",
         alpha=0.7,
     )
     if len(map_viz) > 1:
         plt.imshow(
-            map_viz[1],
-            extent=(-1, reward_map.num_of_cols + 1, reward_map.num_of_rows + 1, -1),
+            1.0 - map_viz[1],
+            extent=(0, reward_map.num_of_cols, reward_map.num_of_rows, 0),
             cmap="binary",
             alpha=0.5,
         )
@@ -102,19 +102,19 @@ def visualize_path(
     if len(map_viz) == 1:
         ax.imshow(
             map_viz[0],
-            extent=(-1, reward_map.num_of_cols + 1, reward_map.num_of_rows + 1, -1),
+            extent=(0, reward_map.num_of_cols, reward_map.num_of_rows, 0),
             cmap="hot",
         )
     else:
         ax.imshow(
             map_viz[0],
-            extent=(-1, reward_map.num_of_cols + 1, reward_map.num_of_rows + 1, -1),
+            extent=(0, reward_map.num_of_cols, reward_map.num_of_rows, 0),
             cmap="hot",
             alpha=0.7,
         )
         ax.imshow(
-            map_viz[1],
-            extent=(-1, reward_map.num_of_cols + 1, reward_map.num_of_rows + 1, -1),
+            1.0 - map_viz[1],
+            extent=(0, reward_map.num_of_cols, reward_map.num_of_rows, 0),
             cmap="binary",
             alpha=0.5,
         )
@@ -123,14 +123,17 @@ def visualize_path(
     num_of_agents = len(paths)
 
     lines = []
+    starts = []
     for agent in range(num_of_agents):
         (line,) = ax.plot([], [], lw=2, color=agent_colors[agent], ls="--", alpha=0.7)
+        (start,) = ax.plot([], [], lw=2, color=agent_colors[agent], marker="x", alpha=0.7)
         lines.append(line)
+        starts.append(start)
 
     def init():
-        for line in lines:
-            line.set_data([], [])
-        return lines
+        for i, path in enumerate(paths):
+            starts[i].set_data(path[0][1], path[0][0])
+        return starts
 
     def update(frame):
         for i, path in enumerate(paths):
@@ -552,8 +555,8 @@ if __name__ == "__main__":
 
     # (rows, columns) -> (y, x) for images!
 
-    y = np.linspace(-1, reward_map.num_of_rows + 1, 1000)
-    x = np.linspace(-1, reward_map.num_of_cols + 1, 1000)
+    y = np.linspace(0, reward_map.num_of_rows, 1000)
+    x = np.linspace(0, reward_map.num_of_cols, 1000)
     xx, yy = np.meshgrid(x, y)
     meshgrid = np.dstack((xx, yy))
     zz = np.zeros_like(xx)
@@ -570,11 +573,12 @@ if __name__ == "__main__":
     agent_colors = ["g", "b", "r", "deeppink", "y", "m", "c", "w"]
 
     if maze is not None:
-        y_obstacle = np.linspace(-1, reward_map.num_of_rows + 1, maze.shape[0])
-        x_obstacle = np.linspace(-1, reward_map.num_of_cols + 1, maze.shape[1])
+        y_obstacle = np.linspace(0, reward_map.num_of_rows, maze.shape[0])
+        x_obstacle = np.linspace(0, reward_map.num_of_cols, maze.shape[1])
 
         obstacles_interpolated = interp2d(x_obstacle, y_obstacle, maze, kind="linear")
         zz_obstacle = obstacles_interpolated(x, y)
+        zz_obstacle[np.where(zz_obstacle >= 0.25)] = 1.0
 
     # Analysis for multi-agent
     analyse_results(
@@ -584,7 +588,7 @@ if __name__ == "__main__":
         reward_map,
         agent_colors,
         [zz, zz_obstacle] if maze is not None else [zz],
-        figures_base_path + "ma-vulcan-" + args.results_pkl[:-4],
+        figures_base_path + "rh-ma-vulcan-" + args.results_pkl[:-4],
         type_of_analysis="multi",
     )
 

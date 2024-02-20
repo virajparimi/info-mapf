@@ -50,7 +50,7 @@
             },
             "args": [
                 "--map_type",
-                "empty-32",
+                "maze-32",
                 "--logging_level",
                 "debug",
             ],
@@ -67,21 +67,10 @@
             },
             "args": [
                 "--results_pkl",
-                "results_empty-16.pkl",
+                "results_maze-32.pkl",
             ],
             "console": "integratedTerminal",
             "justMyCode": true
-        },
-        {
-            "name": "Python: Current File with Profiler",
-            "type": "debugpy",
-            "request": "launch",
-            "module": "cProfile",
-            "args": [
-                "-o",
-                "/tmp/tmp.prof",
-                "${file}"
-            ],
         },
         {
             "name": "Real-World-Testing",
@@ -112,6 +101,17 @@
             ],
             "console": "integratedTerminal",
             "justMyCode": true
+        },
+        {
+            "name": "Python: Current File with Profiler",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "cProfile",
+            "args": [
+                "-o",
+                "/tmp/tmp.prof",
+                "${file}"
+            ],
         },
     ]
 }

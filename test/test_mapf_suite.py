@@ -128,7 +128,7 @@ def setup_experiment_parameters(
             maze.shape[0],
             maze.shape[1],
             30,
-            8,
+            4,
             150,
             5,
         )
