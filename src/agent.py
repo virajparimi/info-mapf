@@ -125,6 +125,7 @@ class Agent(object):
                         np.multiply(
                             reward_map.params.theta_1, 3.0
                         ),  # TODO: Should we be using theta_1 or theta_2 here?
+                        grid,
                     )
                 else:
                     locations_to_consider = [

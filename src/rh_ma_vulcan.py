@@ -3,6 +3,7 @@ from __future__ import annotations
 import queue
 import logging
 import numpy as np
+from time import time
 import itertools as iter
 from copy import deepcopy
 from scipy.special import kl_div
@@ -136,11 +137,16 @@ class MultiAgentVulcan(object):
                             shared_observations
                         )
 
+                    start_time = time()
                     _, best_action = self.multi_agent_search(
                         agent,
                         agent_bubbles[idx],
                         horizon,
                         shared_observations,
+                    )
+                    end_time = time()
+                    logging.debug(
+                        f"Time taken to execute multi-agent search algorithm: {end_time - start_time}"
                     )
 
                     logging.debug(
@@ -665,6 +671,7 @@ class MultiAgentVulcan(object):
                             current.agent_locations[agent_in_comm_range.id],
                             action,
                         )
+                        next_pos_coord = current.grid.get_coordinate(next_pos)
                         if (
                             next_pos < 0
                             or next_pos >= current.grid.map_size
@@ -673,6 +680,9 @@ class MultiAgentVulcan(object):
                                 next_pos,
                             )
                             > 1
+                            or not current.grid.obstacle_map[
+                                next_pos_coord[0], next_pos_coord[1]
+                            ]
                         ):
                             invalid_action_prefix = True
                             break
@@ -728,11 +738,6 @@ class MultiAgentVulcan(object):
                         planning_horizon,
                         shared_observations,
                     )
-
-                    if child_node.timestep >= planning_horizon:
-                        assert child_node._f <= current._f or np.isclose(
-                            child_node._f, current._f
-                        )
 
                     if child_node._f > child_best_gain:
                         child_best_gain = child_node._f

@@ -82,6 +82,36 @@
                 "/tmp/tmp.prof",
                 "${file}"
             ],
-        }
+        },
+        {
+            "name": "Real-World-Testing",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/test/test_real_world_setup.py",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "args": [
+                "--logging_level",
+                "debug",
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "Real-World Analysis",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/test/analyze_real_world_setup_results.py",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "args": [
+                "--results_pkl",
+                "results_real-world-dataset.xyz.pkl",
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
     ]
 }
