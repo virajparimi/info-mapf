@@ -50,7 +50,7 @@
             },
             "args": [
                 "--map_type",
-                "empty-16",
+                "empty-32",
                 "--logging_level",
                 "debug",
             ],
@@ -67,7 +67,7 @@
             },
             "args": [
                 "--results_pkl",
-                "results_original.pkl",
+                "results_empty-16.pkl",
             ],
             "console": "integratedTerminal",
             "justMyCode": true

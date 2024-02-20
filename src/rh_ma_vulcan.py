@@ -593,7 +593,7 @@ class MultiAgentVulcan(object):
         open_set = queue.PriorityQueue()
         open_set.put(root_node)
 
-        best_gain = np.float64(0.0)
+        best_gain = np.float64(-1.0)
         best_action = {
             agent.id: Action(ActionType.Wait, agent.current_location)
             for agent in agent_bubbles
@@ -603,7 +603,11 @@ class MultiAgentVulcan(object):
             current = open_set.get()
             self.nodes_expanded += 1
 
-            if current._f <= best_gain and current.timestep < planning_horizon:
+            if (
+                not open_set.empty()
+                and current._f <= best_gain
+                and current.timestep < planning_horizon
+            ):
                 logging.debug("Size of the open set: " + str(open_set.qsize()))
                 logging.debug("Best action: " + str(best_action))
                 return best_gain, best_action
@@ -647,7 +651,7 @@ class MultiAgentVulcan(object):
                         valid_actions.add(valid_neighbor.action_type.value)
                 valid_actions = list(valid_actions)
 
-                child_best_gain = np.float64(0.0)
+                child_best_gain = np.float64(-1.0)
                 for action_prefixes in current.extract_action_prefix_extensions(
                     valid_actions
                 ):

@@ -198,8 +198,9 @@ class MarkovDecisionProcess(object):
 
         if unobserved_phenomenon:
             for observation_location in observations:
-                phenomenon_probabilities[
-                    location_ids.index(observation_location.location)
-                ] = 0.0
+                if observation_location.location in location_ids:
+                    phenomenon_probabilities[
+                        location_ids.index(observation_location.location)
+                    ] = 0.0
 
         return phenomenon_probabilities
