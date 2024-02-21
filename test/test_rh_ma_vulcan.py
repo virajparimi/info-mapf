@@ -17,6 +17,7 @@ sys.path.append(os.path.join(os.path.dirname(os.path.dirname(__file__)), "src"))
 from agent import Agent  # NOQA
 from utils import generate_map  # NOQA
 from rh_ma_vulcan import MultiAgentVulcan  # NOQA
+from rh_sa_vulcan import SingleAgentVulcan  # NOQA
 from map import Grid, RewardMap, Parameters  # NOQA
 
 
@@ -30,8 +31,8 @@ def visualize_path(
     fig, ax = plt.subplots()
     if map_viz is not None:
         ax.imshow(
-            zz,
-            extent=(-1, reward_map.num_of_rows, reward_map.num_of_cols, -1),
+            map_viz[0],
+            extent=(-1, reward_map.num_of_rows + 1, reward_map.num_of_cols + 1, -1),
             cmap="hot",
         )
     else:
@@ -163,13 +164,13 @@ if __name__ == "__main__":
 
     if "small" in args.type:
         mission_duration = 10
-        communication_range = 2
+        communication_range = 3
     else:
         mission_duration = 35
         communication_range = 5
 
-    x = np.linspace(-1, reward_map.num_of_rows, 1000)
-    y = np.linspace(-1, reward_map.num_of_cols, 1000)
+    x = np.linspace(-1, reward_map.num_of_rows + 1, 1000)
+    y = np.linspace(-1, reward_map.num_of_cols + 1, 1000)
     xx, yy = np.meshgrid(x, y)
     meshgrid = np.dstack((xx, yy))
     zz = np.zeros_like(xx)
@@ -225,7 +226,9 @@ if __name__ == "__main__":
         vulcan_agents_paths.append(vulcan_path)
 
     plt.imshow(
-        zz, extent=(-1, reward_map.num_of_rows, reward_map.num_of_cols, -1), cmap="hot"
+        zz,
+        extent=(-1, reward_map.num_of_rows + 1, reward_map.num_of_cols + 1, -1),
+        cmap="hot",
     )
     if args.save_figures:
         plt.savefig(figures_base_path + "rh-ma-vulcan-" + args.type + ".png")
@@ -234,9 +237,11 @@ if __name__ == "__main__":
         vulcan_agents_paths,
         reward_map,
         figures_base_path + "rh-ma-vulcan-" + args.type + ".gif",
-        [xx, yy, zz],
+        [zz],
         save_fig=args.save_figures,
     )
+
+    # Simple ablative test with only single agent vulcan without collision avoidance
 
     vulcan_grid = deepcopy(grid)
     vulcan_agents = []
@@ -271,7 +276,9 @@ if __name__ == "__main__":
         vulcan_agents_paths.append(vulcan_path)
 
     plt.imshow(
-        zz, extent=(-1, reward_map.num_of_rows, reward_map.num_of_cols, -1), cmap="hot"
+        zz,
+        extent=(-1, reward_map.num_of_rows + 1, reward_map.num_of_cols + 1, -1),
+        cmap="hot",
     )
     if args.save_figures:
         plt.savefig(figures_base_path + "sa-vulcan-" + args.type + ".png")
@@ -280,6 +287,65 @@ if __name__ == "__main__":
         vulcan_agents_paths,
         reward_map,
         figures_base_path + "sa-vulcan-" + args.type + ".gif",
-        [xx, yy, zz],
+        [zz],
+        save_fig=args.save_figures,
+    )
+
+    # Simple ablative test with only single agent vulcan with collision avoidance
+
+    vulcan_grid = deepcopy(grid)
+    vulcan_agents = []
+    for agent in range(len(agent_locations)):
+        agent_location_linearized = vulcan_grid.linearize_coordinate(
+            agent_locations[agent][0], agent_locations[agent][1]
+        )
+        vulcan_agent = Agent(
+            id=agent,
+            start_location=agent_location_linearized,
+            grid=vulcan_grid,
+            reward_map=reward_map,
+            mission_duration=mission_duration,
+        )
+        vulcan_agents.append(vulcan_agent)
+
+    rh_sa_vulcan = SingleAgentVulcan(
+        grid=vulcan_grid,
+        reward_map=reward_map,
+        agents=vulcan_agents,
+    )
+
+    with Profile() as prof:
+        print(f"{rh_sa_vulcan.planner()}")
+        (Stats(prof).strip_dirs().sort_stats(SortKey.CUMULATIVE).print_stats())
+
+    vulcan_agents_paths = []
+    for idx, agent in enumerate(vulcan_agents):
+        vulcan_path = []
+        for v_location in agent.visited_locations:
+            vulcan_path.append(vulcan_grid.get_coordinate(v_location))
+        print("Vulcan Path")
+        print(vulcan_path)
+
+        plt.plot(
+            [x[1] for x in vulcan_path],
+            [x[0] for x in vulcan_path],
+            agent_colors[idx] + "--",
+            alpha=0.7,
+        )
+        vulcan_agents_paths.append(vulcan_path)
+
+    plt.imshow(
+        zz,
+        extent=(-1, reward_map.num_of_rows + 1, reward_map.num_of_cols + 1, -1),
+        cmap="hot",
+    )
+    if args.save_figures:
+        plt.savefig(figures_base_path + "sa-ca-vulcan-" + args.type + ".png")
+
+    visualize_path(
+        vulcan_agents_paths,
+        reward_map,
+        figures_base_path + "sa-ca-vulcan-" + args.type + ".gif",
+        [zz],
         save_fig=args.save_figures,
     )

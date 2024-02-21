@@ -4,6 +4,7 @@ import logging
 import numpy as np
 from copy import deepcopy
 from scipy.special import kl_div
+from numpy.typing import NDArray
 from mdp import MarkovDecisionProcess
 from utils import get_nearest_locations
 from typing import List, Tuple, Union, Dict
@@ -54,7 +55,7 @@ class Agent(object):
                 deepcopy(self.grid),
                 self.reward_map,
             )
-            self.current_location = self.execute_action(best_action)
+            self.current_location = self.execute_action(best_action)  # type: ignore
             self.mdp_handle.update(self.current_location, self.reward_map)
             self.timer += 1
 
@@ -69,7 +70,8 @@ class Agent(object):
         agent_future_measurements: Union[
             Dict[int, Dict[int, List[Observation]]], None
         ] = None,
-    ) -> Tuple[np.float64, Action]:
+        extract_all_actions: bool = False,
+    ) -> Union[Tuple[np.float64, Action], Tuple[NDArray[np.float64], List[Action]]]:
         """
         Extracts the best action to execute at the current timestep
         :param current_location: Current location of the agent
@@ -79,6 +81,7 @@ class Agent(object):
         :param grid: Grid object to query the neighbors of the current location
         :param reward_map: Map object to query the underlying GP
         :param agent_future_measurements: Cached Future measurements of the agent. Only needed when computing h-val
+        :param extract_all_actions: Flag to extract all actions instead of the best action
         """
 
         abscissae, weights = np.polynomial.hermite.hermgauss(self.reward_map.params.J)
@@ -122,6 +125,7 @@ class Agent(object):
                         np.multiply(
                             reward_map.params.theta_1, 3.0
                         ),  # TODO: Should we be using theta_1 or theta_2 here?
+                        grid,
                     )
                 else:
                     locations_to_consider = [
@@ -134,7 +138,7 @@ class Agent(object):
                         locations_to_consider,
                         reward_map,
                         indexed_observations,
-                        unobserved_phenomenon=False,
+                        unobserved_phenomenon=self.use_vulcan,
                     )
                 )
 
@@ -190,10 +194,13 @@ class Agent(object):
                         weights[index] / np.sqrt(np.pi)
                     ) * next_action_reward
 
-        best_reward = np.max(action_rewards)
-        best_action = valid_neighbors[np.argmax(action_rewards)]
+        if extract_all_actions:
+            return action_rewards, valid_neighbors
+        else:
+            best_reward = np.max(action_rewards)
+            best_action = valid_neighbors[np.argmax(action_rewards)]
 
-        return best_reward, best_action
+            return best_reward, best_action
 
     def execute_action(self, action: Action) -> int:
         """

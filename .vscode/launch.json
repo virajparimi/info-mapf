@@ -31,9 +31,11 @@
             },
             "args": [
                 "--type",
-                "multi-large",
+                "single-small",
                 "--measurement_noise",
-                "0.2"
+                "0.2",
+                // "--logging_level",
+                // "debug"
             ],
             "console": "integratedTerminal",
             "justMyCode": true
@@ -48,7 +50,7 @@
             },
             "args": [
                 "--map_type",
-                "empty-16",
+                "maze-32",
                 "--logging_level",
                 "debug",
             ],
@@ -65,7 +67,37 @@
             },
             "args": [
                 "--results_pkl",
-                "results_empty-16.pkl",
+                "results_maze-32.pkl",
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "Real-World-Testing",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/test/test_real_world_setup.py",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "args": [
+                "--logging_level",
+                "debug",
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "Real-World Analysis",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/test/analyze_real_world_setup_results.py",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "args": [
+                "--results_pkl",
+                "results_real-world-dataset.xyz.pkl",
             ],
             "console": "integratedTerminal",
             "justMyCode": true
@@ -80,6 +112,6 @@
                 "/tmp/tmp.prof",
                 "${file}"
             ],
-        }
+        },
     ]
 }

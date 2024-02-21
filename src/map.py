@@ -50,8 +50,9 @@ class Parameters:
 
 
 class Grid(object):
-    def __init__(self, grid: NDArray[np.bool_]):
+    def __init__(self, obstacle_map: NDArray[np.bool_], grid: NDArray[np.bool_]):
         self._grid = grid
+        self._obstacle_map = obstacle_map
         self.num_of_rows = grid.shape[0]
         self.num_of_cols = grid.shape[1]
         self.map_size = self.num_of_rows * self.num_of_cols
@@ -63,6 +64,10 @@ class Grid(object):
     @property
     def grid(self) -> NDArray[np.bool_]:
         return self._grid
+
+    @property
+    def obstacle_map(self) -> NDArray[np.bool_]:
+        return self._obstacle_map
 
     def get_row_coordinate(self, location_id: int) -> int:
         """

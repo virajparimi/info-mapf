@@ -7,35 +7,29 @@ from copy import deepcopy
 from numpy.typing import NDArray
 from dataclasses import dataclass
 from argparse import ArgumentParser
-from typing import List, Tuple, Set, Union, Dict, Any
+from typing import List, Tuple, Union, Dict, Any
+from test_mapf_suite import VulcanStats, SampleStats
+from utils import (
+    load_data_to_pandas,
+    extract_grid_from_data,
+    generate_map_from_data,
+    extract_rows_and_cols_from_data,
+)
 
 
 @dataclass
-class VulcanStats:
-    path: List[NDArray[np.int64]]
-    phenomenons_discovered: Set[Tuple[int, int]]
-
-
-@dataclass
-class SampleStats:
-    nodes_expanded: int
-    nodes_generated: int
-    gp_locations: List[Tuple[int, int]]
-    multi_agent_stats: List[VulcanStats]
-    single_agent_stats: List[VulcanStats]
-    single_agent_collision_avoidance_stats: List[VulcanStats]
-    agent_locations: List[Tuple[int, int]]
-
-
-@dataclass
-class Statistics:
+class RealWorldStatistics:
     rows: int
     cols: int
     max_gps: int
     num_agents: int
+    dataset_name: str
     mission_duration: int
+    obstacle_threshold: int
     communication_range: int
     stats: List[SampleStats]
+    cell_size_degrees: float
+    bounds: Tuple[float, float, float, float]
 
 
 NUM_SAMPLES = 100
@@ -49,99 +43,37 @@ from rh_sa_vulcan import SingleAgentVulcan  # NOQA
 from map import Grid, RewardMap, Parameters  # NOQA
 
 
-def load_mapf_map(filename: str) -> NDArray[np.bool_]:
-    filecontents = None
-    with open(filename, "r") as f:
-        filecontents = f.readlines()
-
-    filecontents = [line.rstrip() for line in filecontents]
-
-    height = int(filecontents[1].split(" ")[1])
-    width = int(filecontents[2].split(" ")[1])
-    mapcontent = filecontents[4:]
-
-    maze = np.ones((height, width), dtype=np.bool_)
-    for row, line in enumerate(mapcontent):
-        for col, char in enumerate(line):
-            if char == "@":
-                maze[row, col] = False
-            elif char == "T":
-                maze[row, col] = False
-
-    return maze
-
-
 def setup_experiment_parameters(
-    map_type: str,
-) -> Tuple[int, int, int, int, int, int, Union[NDArray[np.bool_], None]]:
-    maze = None
-    if map_type == "original":
-        rows, cols, max_gps, num_agents, mission_duration, communication_range = (
-            11,
-            11,
-            4,
-            2,
-            35,
-            5,
-        )
-    elif map_type == "empty-16":
-        rows, cols, max_gps, num_agents, mission_duration, communication_range = (
-            16,
-            16,
-            5,
-            3,
-            50,
-            5,
-        )
-    elif map_type == "empty-32":
-        rows, cols, max_gps, num_agents, mission_duration, communication_range = (
-            32,
-            32,
+    dataset_name: str,
+) -> Tuple[int, int, int, int, int, List[str], Tuple[float, float, float, float]]:
+    if dataset_name == "real-world-dataset.xyz":
+        (
+            max_gps,
+            num_agents,
+            mission_duration,
+            communication_range,
+            obstacle_threshold,
+            header,
+            bounds,
+        ) = (
             10,
             4,
             100,
             5,
-        )
-    elif map_type == "maze-32":
-        maze = load_mapf_map(
-            os.path.join(
-                os.path.dirname(os.path.abspath(__file__)),
-                "../data/maps/maze-32-32-4.map",
-            )
-        )
-        rows, cols, max_gps, num_agents, mission_duration, communication_range = (
-            maze.shape[0],
-            maze.shape[1],
-            10,
-            4,
-            100,
-            5,
-        )
-    elif map_type == "dense":
-        maze = load_mapf_map(
-            os.path.join(
-                os.path.dirname(os.path.abspath(__file__)),
-                "../data/maps/den312d.map",
-            )
-        )
-        rows, cols, max_gps, num_agents, mission_duration, communication_range = (
-            maze.shape[0],
-            maze.shape[1],
-            30,
-            4,
-            150,
-            5,
+            15,
+            ["SURVEY", "LON", "LAT", "DEPTH"],
+            (42.344, 42.355, -70.89, -70.876),
         )
     else:
-        raise ValueError("Invalid map type")
+        raise ValueError(f"Dataset {dataset_name} is either not supported or invalid")
     return (
-        rows,
-        cols,
         max_gps,
         num_agents,
         mission_duration,
         communication_range,
-        maze,
+        obstacle_threshold,
+        header,
+        bounds,
     )
 
 
@@ -235,27 +167,39 @@ def execute_sample(parameter: Dict[str, Any], sample_id: int) -> SampleStats:
         parameter["num_agents"], parameter["max_gps"] + 1
     )
 
+    rows, cols = extract_rows_and_cols_from_data(
+        parameter["dataframe"], parameter["bounds"], parameter["cell_size_degrees"]
+    )
+
+    grid = extract_grid_from_data(
+        parameter["dataframe"],
+        parameter["bounds"],
+        parameter["cell_size_degrees"],
+        parameter["obstacle_threshold"],
+    )
+
     # Spawn the agents and the phenomenons such that the phenomenons are not spawned on the agents
     agent_locations = generate_agent_locations(
         parameter["num_agents"],
-        parameter["rows"],
-        parameter["cols"],
+        rows,
+        cols,
         parameter["communication_range"],
-        parameter["maze"],
+        grid.obstacle_map,
     )
     gp_locations = generate_gp_locations(
         num_phenomenon,
-        parameter["rows"],
-        parameter["cols"],
-        parameter["maze"],
+        rows,
+        cols,
+        grid.obstacle_map,
         agent_locations,
     )
 
     # Generate the map
-    grid, reward_map = generate_map(
-        parameter["rows"],
-        parameter["cols"],
-        grid=parameter["maze"],
+    grid, reward_map = generate_map_from_data(
+        parameter["dataframe"],
+        parameter["bounds"],
+        parameter["cell_size_degrees"],
+        parameter["obstacle_threshold"],
         agent_locations=agent_locations,
         gp_means=np.ones(num_phenomenon).tolist(),
         gp_locations=gp_locations,
@@ -364,15 +308,19 @@ def execute_sample(parameter: Dict[str, Any], sample_id: int) -> SampleStats:
         sample_stats.single_agent_collision_avoidance_stats.append(vulcan_agent_stats)
 
     filename = (
-        parameter["results_base_path"] + "results_" + parameter["map_type"] + ".pkl"
+        parameter["results_base_path"] + "results_" + parameter["dataset_name"] + ".pkl"
     )
     if not os.path.isfile(filename):
-        statistics = Statistics(
-            rows=parameter["rows"],
-            cols=parameter["cols"],
+        statistics = RealWorldStatistics(
+            rows=rows,
+            cols=cols,
+            bounds=parameter["bounds"],
             max_gps=parameter["max_gps"],
             num_agents=parameter["num_agents"],
+            dataset_name=parameter["dataset_name"],
             mission_duration=parameter["mission_duration"],
+            cell_size_degrees=parameter["cell_size_degrees"],
+            obstacle_threshold=parameter["obstacle_threshold"],
             communication_range=parameter["communication_range"],
             stats=[sample_stats],
         )
@@ -403,16 +351,24 @@ def execute_sample(parameter: Dict[str, Any], sample_id: int) -> SampleStats:
 
 
 if __name__ == "__main__":
+    dataset_base_path = os.path.dirname(os.path.abspath(__file__)) + "/../data/maps/"
     results_base_path = (
         os.path.dirname(os.path.abspath(__file__)) + "/../data/all_observed_set/"
     )
     parser = ArgumentParser()
     parser.add_argument(
-        "--map_type",
+        "--dataset_name",
         type=str,
-        default="original",
-        choices=["original", "empty-16", "empty-32", "maze-32", "dense"],
-        help="Type of map to use",
+        default="real-world-dataset.xyz",
+        choices=["real-world-dataset.xyz"],
+        help="Which real-world dataset to use",
+    )
+
+    parser.add_argument(
+        "--cell_size_degrees",
+        type=float,
+        default=0.0003,
+        help="Size of each cell in degrees",
     )
 
     parser.add_argument(
@@ -432,8 +388,8 @@ if __name__ == "__main__":
         logging.getLogger().setLevel(logging.INFO)
 
     params = Parameters(
-        theta_1=np.float64(0.4),
-        theta_2=np.float64(0.01),
+        theta_1=np.float64(1.25),
+        theta_2=np.float64(args.cell_size_degrees * 4),
         u_tilde=np.float64(1.4),
         P_1=np.float64(0.98),
         P_2=np.float64(0.002),
@@ -443,24 +399,37 @@ if __name__ == "__main__":
     )
 
     # Extract the map parameters
-    rows, cols, max_gps, num_agents, mission_duration, communication_range, maze = (
-        setup_experiment_parameters(args.map_type)
-    )
+    (
+        max_gps,
+        num_agents,
+        mission_duration,
+        communication_range,
+        obstacle_threshold,
+        header,
+        bounds,
+    ) = setup_experiment_parameters(args.dataset_name)
+    dataframe = load_data_to_pandas(dataset_base_path + args.dataset_name, header)
+
+    for head in header:
+        if head != "SURVEY":
+            dataframe[head] = dataframe[head].astype(float)
+
     arguments = {
         "params": params,
-        "maze": maze,
-        "rows": rows,
-        "cols": cols,
+        "bounds": bounds,
         "max_gps": max_gps,
+        "dataframe": dataframe,
         "num_agents": num_agents,
-        "map_type": args.map_type,
+        "dataset_name": args.dataset_name,
         "mission_duration": mission_duration,
         "results_base_path": results_base_path,
+        "obstacle_threshold": obstacle_threshold,
         "communication_range": communication_range,
+        "cell_size_degrees": args.cell_size_degrees,
     }
 
     start = 0
-    filename = results_base_path + "results_" + args.map_type + ".pkl"
+    filename = results_base_path + "results_" + args.dataset_name + ".pkl"
     if os.path.isfile(filename):
         with open(
             filename,

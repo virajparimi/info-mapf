@@ -3,26 +3,35 @@ import sys
 import pickle
 import logging
 import numpy as np
+
+# import cartopy.crs as ccrs
+from pandas import DataFrame
 from numpy.typing import NDArray
 from argparse import ArgumentParser
 from matplotlib import pyplot as plt
-from scipy.interpolate import interp2d
 from typing import List, Tuple, Any, Union
 from scipy.stats import multivariate_normal
 from matplotlib.animation import FuncAnimation
-from test_mapf_suite import Statistics, SampleStats, VulcanStats, load_mapf_map  # NOQA
+from scipy.interpolate import griddata, interp2d
 
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(__file__)), "src"))
 
 from agent import Agent  # NOQA
-from utils import generate_map  # NOQA
-from map import Grid, RewardMap, Parameters  # NOQA
 from rh_ma_vulcan import MultiAgentVulcan  # NOQA
+from map import Grid, RewardMap, Parameters  # NOQA
+from test_real_world_setup import RealWorldStatistics  # NOQA
+from test_mapf_suite import SampleStats, VulcanStats  # NOQA
+from utils import (  # NOQA
+    load_data_to_pandas,
+    generate_map_from_data,
+    extract_grid_from_data,
+    extract_rows_and_cols_from_data,
+)  # NOQA
 
 
-def analyse_results(
+def analyze_results(
     sample_to_visualize: int,
-    statistics: Statistics,
+    statistics: RealWorldStatistics,
     agent_locations: List[Tuple[int, int]],
     reward_map: RewardMap,
     agent_colors: List[str],
@@ -30,6 +39,9 @@ def analyse_results(
     filename: str,
     type_of_analysis: str = "multi",
 ):
+
+    # fig = plt.figure(figsize=(10, 8))
+    # ax = fig.add_subplot(1, 1, 1, projection=ccrs.PlateCarree())
 
     vulcan_agents_paths = []
     for agent_idx in range(len(agent_locations)):
@@ -64,6 +76,19 @@ def analyse_results(
         )
         vulcan_agents_paths.append(vulcan_path)
 
+    # grid_lon, grid_lat, obstacles = setup_dataset_viz(
+    #     dataframe, bounds, rows, cols, obstacle_threshold
+    # )
+    # contour = ax.contourf(
+    #     grid_lon,
+    #     grid_lat,
+    #     obstacles,
+    #     levels=[-0.5, 0.5, 1.5],
+    #     colors=["green", "yellow"],
+    #     alpha=0.7,
+    #     transform=ccrs.PlateCarree(),
+    # )
+
     plt.imshow(
         map_viz[0],
         extent=(0, reward_map.num_of_cols, reward_map.num_of_rows, 0),
@@ -75,6 +100,7 @@ def analyse_results(
             1.0 - map_viz[1],
             extent=(0, reward_map.num_of_cols, reward_map.num_of_rows, 0),
             cmap="binary",
+            # origin="lower",
             alpha=0.5,
         )
 
@@ -89,6 +115,30 @@ def analyse_results(
         save_fig=True,
     )
     plt.clf()
+
+
+def setup_dataset_viz(
+    dataframe: DataFrame,
+    bounds: Tuple[float, float, float, float],
+    rows: int,
+    cols: int,
+    obstacle_threshold: float,
+) -> Tuple[NDArray[Any], NDArray[Any], NDArray[Any]]:
+    grid_lon, grid_lat = np.meshgrid(
+        np.linspace(bounds[2], bounds[3], cols),
+        np.linspace(bounds[0], bounds[1], rows),
+    )
+
+    # Interpolate depth data onto the grid
+    grid_depth = griddata(
+        (dataframe["LON"], dataframe["LAT"]),
+        dataframe["DEPTH"],
+        (grid_lon, grid_lat),
+        method="linear",
+    )
+
+    obstacles = np.where(grid_depth < obstacle_threshold, 0, 1)
+    return grid_lon, grid_lat, obstacles
 
 
 def visualize_path(
@@ -157,7 +207,7 @@ def validate_paths(
     agent_i: Tuple[int, List[NDArray[np.int64]]],
     agent_j: Tuple[int, List[NDArray[np.int64]]],
     mission_duration: int,
-    maze: Union[NDArray[np.bool_], None] = None,
+    maze: Union[NDArray[np.bool_], None],
     multi: bool = True,
     single_ca: bool = False,
 ) -> int:
@@ -209,6 +259,7 @@ def validate_paths(
 
 
 if __name__ == "__main__":
+    dataset_base_path = os.path.dirname(os.path.abspath(__file__)) + "/../data/maps/"
     results_base_path = (
         os.path.dirname(os.path.abspath(__file__)) + "/../data/all_observed_set/"
     )
@@ -240,25 +291,34 @@ if __name__ == "__main__":
     else:
         logging.getLogger().setLevel(logging.INFO)
 
-    maze = None
-    if "maze" in args.results_pkl:
-        maze = load_mapf_map(
-            os.path.join(
-                os.path.dirname(os.path.abspath(__file__)),
-                "../data/maps/maze-32-32-4.map",
-            )
-        )
-    elif "dense" in args.results_pkl:
-        maze = load_mapf_map(
-            os.path.join(
-                os.path.dirname(os.path.abspath(__file__)),
-                "../data/maps/den312d.map",
-            )
-        )
-
     statistics = None
     with open(results_base_path + args.results_pkl, "rb") as f:
         statistics = pickle.load(f)
+
+    maze = None
+    bounds = statistics.bounds
+    dataset_name = statistics.dataset_name
+    cell_size_degrees = statistics.cell_size_degrees
+    obstacle_threshold = statistics.obstacle_threshold
+    if "real-world" in dataset_name:
+        header = ["SURVEY", "LON", "LAT", "DEPTH"]
+
+        dataframe = load_data_to_pandas(dataset_base_path + dataset_name, header)
+        for head in header:
+            if head != "SURVEY":
+                dataframe[head] = dataframe[head].astype(float)
+
+        rows, cols = extract_rows_and_cols_from_data(
+            dataframe, bounds, cell_size_degrees
+        )
+
+        grid = extract_grid_from_data(
+            dataframe,
+            bounds,
+            cell_size_degrees,
+            obstacle_threshold,
+        )
+        maze = grid.grid
 
     num_samples = len(statistics.stats)
 
@@ -270,8 +330,9 @@ if __name__ == "__main__":
     ) = ([], [], [])
     ratios = []
 
-    mission_duration = statistics.mission_duration
-    for sample in range(num_samples):
+    # mission_duration = statistics.mission_duration
+    mission_duration = 25
+    for sample in range(1, num_samples):
 
         gp_locations = statistics.stats[sample].gp_locations
         agent_locations = statistics.stats[sample].agent_locations
@@ -475,6 +536,7 @@ if __name__ == "__main__":
     )
     max_diff = np.max(diff_array)
     sample_to_visualize = np.random.choice(np.flatnonzero(diff_array == max_diff))
+    sample_to_visualize = 1
 
     print(
         f"Single-agent steps: {np.mean(single_agent_steps)} +/- {np.std(single_agent_steps)}"
@@ -533,8 +595,8 @@ if __name__ == "__main__":
     agent_locations = statistics.stats[sample_to_visualize].agent_locations
 
     params = Parameters(
-        theta_1=np.float64(0.4),
-        theta_2=np.float64(0.01),
+        theta_1=np.float64(1.25),
+        theta_2=np.float64(cell_size_degrees * 4.0),
         u_tilde=np.float64(1.4),
         P_1=np.float64(0.98),
         P_2=np.float64(0.002),
@@ -543,10 +605,11 @@ if __name__ == "__main__":
         distance_simplification=True,
     )
 
-    grid, reward_map = generate_map(
-        rows,
-        cols,
-        grid=maze,
+    grid, reward_map = generate_map_from_data(
+        dataframe,
+        bounds,
+        cell_size_degrees,
+        obstacle_threshold,
         agent_locations=agent_locations,
         gp_means=np.ones(len(gp_locations)).tolist(),
         gp_locations=gp_locations,
@@ -573,15 +636,14 @@ if __name__ == "__main__":
     agent_colors = ["g", "b", "r", "deeppink", "y", "m", "c", "w"]
 
     if maze is not None:
-        y_obstacle = np.linspace(0, reward_map.num_of_rows, maze.shape[0])
         x_obstacle = np.linspace(0, reward_map.num_of_cols, maze.shape[1])
+        y_obstacle = np.linspace(0, reward_map.num_of_rows, maze.shape[0])
 
         obstacles_interpolated = interp2d(x_obstacle, y_obstacle, maze, kind="linear")
         zz_obstacle = obstacles_interpolated(x, y)
         zz_obstacle[np.where(zz_obstacle >= 0.25)] = 1.0
 
-    # Analysis for multi-agent
-    analyse_results(
+    analyze_results(
         sample_to_visualize,
         statistics,
         agent_locations,
@@ -592,8 +654,7 @@ if __name__ == "__main__":
         type_of_analysis="multi",
     )
 
-    # Analysis for single-agent
-    analyse_results(
+    analyze_results(
         sample_to_visualize,
         statistics,
         agent_locations,
@@ -604,8 +665,7 @@ if __name__ == "__main__":
         type_of_analysis="single",
     )
 
-    # Analysis for single-agent with collision avoidance
-    analyse_results(
+    analyze_results(
         sample_to_visualize,
         statistics,
         agent_locations,
