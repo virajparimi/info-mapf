@@ -18,9 +18,13 @@ sys.path.append(os.path.join(os.path.dirname(os.path.dirname(__file__)), "src"))
 
 from agent import Agent  # NOQA
 from rh_ma_vulcan import MultiAgentVulcan  # NOQA
-from map import Grid, RewardMap, Parameters  # NOQA
-from test_real_world_setup import RealWorldStatistics  # NOQA
 from test_mapf_suite import SampleStats, VulcanStats  # NOQA
+from test_real_world_setup import RealWorldStatistics  # NOQA
+from map import Grid, RewardMap, Parameters, ActionType  # NOQA
+from analyze_mapf_suite_results import (  # NOQA
+    linearize_coordinate,
+    within_range_agents,
+)  # NOQA
 from utils import (  # NOQA
     load_data_to_pandas,
     generate_map_from_data,
@@ -176,7 +180,9 @@ def visualize_path(
     starts = []
     for agent in range(num_of_agents):
         (line,) = ax.plot([], [], lw=2, color=agent_colors[agent], ls="--", alpha=0.7)
-        (start,) = ax.plot([], [], lw=2, color=agent_colors[agent], marker="x", alpha=0.7)
+        (start,) = ax.plot(
+            [], [], lw=2, color=agent_colors[agent], marker="x", alpha=0.7
+        )
         lines.append(line)
         starts.append(start)
 
@@ -329,6 +335,7 @@ if __name__ == "__main__":
         single_agent_ca_phenomenons_discovered,
     ) = ([], [], [])
     ratios = []
+    total_nodes_expanded, total_nodes_generated, max_nodes_generated = 0, 0, 0
 
     # mission_duration = statistics.mission_duration
     mission_duration = 25
@@ -339,6 +346,9 @@ if __name__ == "__main__":
 
         num_expanded_nodes = statistics.stats[sample].nodes_expanded
         num_generated_nodes = statistics.stats[sample].nodes_generated
+
+        total_nodes_expanded += num_expanded_nodes
+        total_nodes_generated += num_generated_nodes
         ratio = num_expanded_nodes / num_generated_nodes
         ratios.append(ratio)
 
@@ -448,9 +458,15 @@ if __name__ == "__main__":
             single_last_gp_found_step,
             single_ca_last_gp_found_step,
         ) = (0, 0, 0)
+
+        local_agents_gp_found = [mission_duration for _ in range(len(agent_locations))]
         for step in range(multi_agent_last_valid_step):
+            agent_coords = []
             for agent in range(len(agent_locations)):
                 coord = statistics.stats[sample].multi_agent_stats[agent].path[step]
+                agent_coords.append(
+                    linearize_coordinate(coord[0], coord[1], statistics.cols)
+                )
                 coord_compare = (coord[0], coord[1])
                 if (
                     coord_compare in gp_locations
@@ -458,7 +474,32 @@ if __name__ == "__main__":
                 ):
                     multi_last_gp_found_step = step
                     sample_multi_agent_phenomenons_discovered.add(coord_compare)
+                    if local_agents_gp_found[agent] == mission_duration:
+                        local_agents_gp_found[agent] = step
 
+            within_range = within_range_agents(
+                len(agent_locations),
+                agent_coords,
+                statistics.cols,
+                statistics.communication_range,
+            )
+
+            if len(within_range) > 0:
+                default_horizon = 2
+                len_action_space = len(
+                    [action_type.value for action_type in ActionType]
+                )
+                for multi_agent_spawn in within_range:
+                    for horizon in range(1, default_horizon + 1):
+                        max_nodes_generated += multi_agent_spawn ** (
+                            len_action_space * horizon
+                        )
+
+        avg_multi_agent_first_gp_found_step = np.sum(local_agents_gp_found) / len(
+            agent_locations
+        )
+
+        local_agents_gp_found = [mission_duration for _ in range(len(agent_locations))]
         for step in range(single_agent_last_valid_step):
             for agent in range(len(agent_locations)):
                 coord = statistics.stats[sample].single_agent_stats[agent].path[step]
@@ -469,7 +510,13 @@ if __name__ == "__main__":
                 ):
                     single_last_gp_found_step = step
                     sample_single_agent_phenomenons_discovered.add(coord_compare)
+                    if local_agents_gp_found[agent] == mission_duration:
+                        local_agents_gp_found[agent] = step
+        avg_single_agent_first_gp_found_step = np.sum(local_agents_gp_found) / len(
+            agent_locations
+        )
 
+        local_agents_gp_found = [mission_duration for _ in range(len(agent_locations))]
         for step in range(single_agent_ca_last_valid_step):
             for agent in range(len(agent_locations)):
                 coord = (
@@ -485,6 +532,11 @@ if __name__ == "__main__":
                 ):
                     single_ca_last_gp_found_step = step
                     sample_single_agent_ca_phenomenons_discovered.add(coord_compare)
+                    if local_agents_gp_found[agent] == mission_duration:
+                        local_agents_gp_found[agent] = step
+        avg_single_agent_ca_first_gp_found_step = np.sum(local_agents_gp_found) / len(
+            agent_locations
+        )
 
         multi_agent_phenomenons_discovered.append(
             len(sample_multi_agent_phenomenons_discovered)
@@ -562,6 +614,12 @@ if __name__ == "__main__":
     )
     print(
         f"Ratio of expanded nodes to generated nodes: {np.mean(ratios)} +/- {np.std(ratios)}"
+    )
+    print(
+        f"Ratio of generated nodes to maximum possible nodes: {total_nodes_generated / max_nodes_generated}"
+    )
+    print(
+        f"Ratio of expanded nodes to maximum possible nodes: {total_nodes_expanded / max_nodes_generated}"
     )
 
     # Now we visualize the paths of the agents for a given sample

@@ -7,17 +7,98 @@ from numpy.typing import NDArray
 from argparse import ArgumentParser
 from matplotlib import pyplot as plt
 from scipy.interpolate import interp2d
-from typing import List, Tuple, Any, Union
 from scipy.stats import multivariate_normal
 from matplotlib.animation import FuncAnimation
+from typing import List, Tuple, Any, Union, Set
 from test_mapf_suite import Statistics, SampleStats, VulcanStats, load_mapf_map  # NOQA
 
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(__file__)), "src"))
 
 from agent import Agent  # NOQA
 from utils import generate_map  # NOQA
-from map import Grid, RewardMap, Parameters  # NOQA
 from rh_ma_vulcan import MultiAgentVulcan  # NOQA
+from map import Grid, RewardMap, Parameters, ActionType  # NOQA
+
+
+def get_row_coordinate(location_id: int, num_of_cols: int) -> int:
+    return location_id // num_of_cols
+
+
+def get_column_coordinate(location_id: int, num_of_cols: int) -> int:
+    return location_id % num_of_cols
+
+
+def get_coordinate(location_id: int, num_of_cols: int) -> NDArray[np.int64]:
+    return np.array(
+        [
+            get_row_coordinate(location_id, num_of_cols),
+            get_column_coordinate(location_id, num_of_cols),
+        ]
+    )
+
+
+def linearize_coordinate(row: int, column: int, num_of_cols: int) -> int:
+    return num_of_cols * row + column
+
+
+def get_manhattan_distance(
+    location_id_a: int, location_id_b: int, num_of_cols: int
+) -> int:
+    location_a = get_coordinate(location_id_a, num_of_cols)
+    location_b = get_coordinate(location_id_b, num_of_cols)
+    return np.sum(np.abs(location_a - location_b))
+
+
+def find_minimal_disjoint_sets(agent_bubbles: List[Set[int]]) -> List[Set[int]]:
+    minimal_disjoint_sets = []
+
+    for bubble in agent_bubbles:
+        intersecting_sets = []
+        for idx, existing_set in enumerate(minimal_disjoint_sets):
+            if set(bubble).intersection(existing_set):
+                intersecting_sets.append(idx)
+
+        if not intersecting_sets:
+            minimal_disjoint_sets.append(set(bubble))
+        else:
+            merged_set = set(bubble)
+            for idx in sorted(intersecting_sets, reverse=True):
+                merged_set |= minimal_disjoint_sets.pop(idx)
+            minimal_disjoint_sets.append(merged_set)
+
+    return minimal_disjoint_sets
+
+
+def within_range_agents(
+    num_agents: int,
+    agent_locations: List[int],
+    num_of_cols: int,
+    communication_range: int,
+) -> List[int]:
+    agent_bubbles = [[i] for i in range(num_agents)]
+    for agent_i in range(num_agents):
+        for agent_j in range(num_agents):
+            if agent_i == agent_j:
+                continue
+            agent_i_location = agent_locations[agent_i]
+            agent_j_location = agent_locations[agent_j]
+            if (
+                get_manhattan_distance(agent_i_location, agent_j_location, num_of_cols)
+                < communication_range
+            ):
+                agent_bubbles[agent_i].append(agent_j)
+
+        agent_bubbles[agent_i] = sorted(agent_bubbles[agent_i])
+
+    modified_agent_bubbles = [set(bubble) for bubble in agent_bubbles]
+    minimal_disjoint_sets = find_minimal_disjoint_sets(modified_agent_bubbles)
+    mapped_agent_bubbles = {}
+    for idx, bubble in enumerate(minimal_disjoint_sets):
+        list_bubble = list(bubble)
+        min_id = min([agent for agent in list_bubble])
+        mapped_agent_bubbles[min_id] = list_bubble
+
+    return [len(value) for key, value in mapped_agent_bubbles.items()]
 
 
 def analyse_results(
@@ -280,6 +361,7 @@ if __name__ == "__main__":
         single_agent_ca_phenomenons_discovered,
     ) = ([], [], [])
     ratios = []
+    total_nodes_expanded, total_nodes_generated, max_nodes_generated = 0, 0, 0
 
     mission_duration = statistics.mission_duration
     for sample in range(num_samples):
@@ -289,6 +371,9 @@ if __name__ == "__main__":
 
         num_expanded_nodes = statistics.stats[sample].nodes_expanded
         num_generated_nodes = statistics.stats[sample].nodes_generated
+
+        total_nodes_expanded += num_expanded_nodes
+        total_nodes_generated += num_generated_nodes
         ratio = num_expanded_nodes / num_generated_nodes
         ratios.append(ratio)
 
@@ -405,9 +490,14 @@ if __name__ == "__main__":
             avg_single_agent_ca_first_gp_found_step,
         ) = (0, 0, 0)
 
+        local_agents_gp_found = [mission_duration for _ in range(len(agent_locations))]
         for step in range(multi_agent_last_valid_step):
+            agent_coords = []
             for agent in range(len(agent_locations)):
                 coord = statistics.stats[sample].multi_agent_stats[agent].path[step]
+                agent_coords.append(
+                    linearize_coordinate(coord[0], coord[1], statistics.cols)
+                )
                 coord_compare = (coord[0], coord[1])
                 if (
                     coord_compare in gp_locations
@@ -415,10 +505,32 @@ if __name__ == "__main__":
                 ):
                     multi_last_gp_found_step = step
                     sample_multi_agent_phenomenons_discovered.add(coord_compare)
-                if len(sample_multi_agent_phenomenons_discovered) == 1:
-                    avg_multi_agent_first_gp_found_step += step
-        avg_multi_agent_first_gp_found_step /= len(agent_locations)
+                    if local_agents_gp_found[agent] == mission_duration:
+                        local_agents_gp_found[agent] = step
 
+            within_range = within_range_agents(
+                len(agent_locations),
+                agent_coords,
+                statistics.cols,
+                statistics.communication_range,
+            )
+
+            if len(within_range) > 0:
+                default_horizon = 2
+                len_action_space = len(
+                    [action_type.value for action_type in ActionType]
+                )
+                for multi_agent_spawn in within_range:
+                    for horizon in range(1, default_horizon + 1):
+                        max_nodes_generated += multi_agent_spawn ** (
+                            len_action_space * horizon
+                        )
+
+        avg_multi_agent_first_gp_found_step = np.sum(local_agents_gp_found) / len(
+            agent_locations
+        )
+
+        local_agents_gp_found = [mission_duration for _ in range(len(agent_locations))]
         for step in range(single_agent_last_valid_step):
             for agent in range(len(agent_locations)):
                 coord = statistics.stats[sample].single_agent_stats[agent].path[step]
@@ -429,10 +541,13 @@ if __name__ == "__main__":
                 ):
                     single_last_gp_found_step = step
                     sample_single_agent_phenomenons_discovered.add(coord_compare)
-                if len(sample_single_agent_phenomenons_discovered) == 1:
-                    avg_single_agent_first_gp_found_step += step
-        avg_single_agent_first_gp_found_step /= len(agent_locations)
+                    if local_agents_gp_found[agent] == mission_duration:
+                        local_agents_gp_found[agent] = step
+        avg_single_agent_first_gp_found_step = np.sum(local_agents_gp_found) / len(
+            agent_locations
+        )
 
+        local_agents_gp_found = [mission_duration for _ in range(len(agent_locations))]
         for step in range(single_agent_ca_last_valid_step):
             for agent in range(len(agent_locations)):
                 coord = (
@@ -448,9 +563,11 @@ if __name__ == "__main__":
                 ):
                     single_ca_last_gp_found_step = step
                     sample_single_agent_ca_phenomenons_discovered.add(coord_compare)
-                if len(sample_single_agent_ca_phenomenons_discovered) == 1:
-                    avg_single_agent_ca_first_gp_found_step += step
-        avg_single_agent_ca_first_gp_found_step /= len(agent_locations)
+                    if local_agents_gp_found[agent] == mission_duration:
+                        local_agents_gp_found[agent] = step
+        avg_single_agent_ca_first_gp_found_step = np.sum(local_agents_gp_found) / len(
+            agent_locations
+        )
 
         multi_agent_phenomenons_discovered.append(
             len(sample_multi_agent_phenomenons_discovered)
@@ -543,6 +660,12 @@ if __name__ == "__main__":
     )
     print(
         f"Ratio of expanded nodes to generated nodes: {np.mean(ratios)} +/- {np.std(ratios)}"
+    )
+    print(
+        f"Ratio of generated nodes to maximum possible nodes: {total_nodes_generated / max_nodes_generated}"
+    )
+    print(
+        f"Ratio of expanded nodes to maximum possible nodes: {total_nodes_expanded / max_nodes_generated}"
     )
 
     # Now we visualize the paths of the agents for a given sample
