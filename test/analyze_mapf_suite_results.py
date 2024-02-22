@@ -126,7 +126,9 @@ def visualize_path(
     starts = []
     for agent in range(num_of_agents):
         (line,) = ax.plot([], [], lw=2, color=agent_colors[agent], ls="--", alpha=0.7)
-        (start,) = ax.plot([], [], lw=2, color=agent_colors[agent], marker="x", alpha=0.7)
+        (start,) = ax.plot(
+            [], [], lw=2, color=agent_colors[agent], marker="x", alpha=0.7
+        )
         lines.append(line)
         starts.append(start)
 
@@ -264,6 +266,15 @@ if __name__ == "__main__":
 
     multi_agent_steps, single_agent_steps, single_agent_ca_steps = [], [], []
     (
+        multi_agent_first_gp_steps,
+        single_agent_first_gp_steps,
+        single_agent_ca_first_gp_steps,
+    ) = (
+        [],
+        [],
+        [],
+    )
+    (
         multi_agent_phenomenons_discovered,
         single_agent_phenomenons_discovered,
         single_agent_ca_phenomenons_discovered,
@@ -387,6 +398,13 @@ if __name__ == "__main__":
             single_last_gp_found_step,
             single_ca_last_gp_found_step,
         ) = (0, 0, 0)
+
+        (
+            avg_multi_agent_first_gp_found_step,
+            avg_single_agent_first_gp_found_step,
+            avg_single_agent_ca_first_gp_found_step,
+        ) = (0, 0, 0)
+
         for step in range(multi_agent_last_valid_step):
             for agent in range(len(agent_locations)):
                 coord = statistics.stats[sample].multi_agent_stats[agent].path[step]
@@ -397,6 +415,9 @@ if __name__ == "__main__":
                 ):
                     multi_last_gp_found_step = step
                     sample_multi_agent_phenomenons_discovered.add(coord_compare)
+                if len(sample_multi_agent_phenomenons_discovered) == 1:
+                    avg_multi_agent_first_gp_found_step += step
+        avg_multi_agent_first_gp_found_step /= len(agent_locations)
 
         for step in range(single_agent_last_valid_step):
             for agent in range(len(agent_locations)):
@@ -408,6 +429,9 @@ if __name__ == "__main__":
                 ):
                     single_last_gp_found_step = step
                     sample_single_agent_phenomenons_discovered.add(coord_compare)
+                if len(sample_single_agent_phenomenons_discovered) == 1:
+                    avg_single_agent_first_gp_found_step += step
+        avg_single_agent_first_gp_found_step /= len(agent_locations)
 
         for step in range(single_agent_ca_last_valid_step):
             for agent in range(len(agent_locations)):
@@ -424,6 +448,9 @@ if __name__ == "__main__":
                 ):
                     single_ca_last_gp_found_step = step
                     sample_single_agent_ca_phenomenons_discovered.add(coord_compare)
+                if len(sample_single_agent_ca_phenomenons_discovered) == 1:
+                    avg_single_agent_ca_first_gp_found_step += step
+        avg_single_agent_ca_first_gp_found_step /= len(agent_locations)
 
         multi_agent_phenomenons_discovered.append(
             len(sample_multi_agent_phenomenons_discovered)
@@ -434,6 +461,10 @@ if __name__ == "__main__":
         single_agent_ca_phenomenons_discovered.append(
             len(sample_single_agent_ca_phenomenons_discovered)
         )
+
+        multi_agent_first_gp_steps.append(avg_multi_agent_first_gp_found_step)
+        single_agent_first_gp_steps.append(avg_single_agent_first_gp_found_step)
+        single_agent_ca_first_gp_steps.append(avg_single_agent_ca_first_gp_found_step)
 
         if (
             len(sample_multi_agent_phenomenons_discovered) != len(gp_locations)
@@ -485,6 +516,18 @@ if __name__ == "__main__":
     )
     print(
         f"Multi-agent steps: {np.mean(multi_agent_steps)} +/- {np.std(multi_agent_steps)}"
+    )
+    print(
+        f"Single-agent first GP found step: {np.mean(single_agent_first_gp_steps)}"
+        f" +/- {np.std(single_agent_first_gp_steps)}"
+    )
+    print(
+        f"Single-agent with collision avoidance first GP found step: {np.mean(single_agent_ca_first_gp_steps)}"
+        f" +/- {np.std(single_agent_ca_first_gp_steps)}"
+    )
+    print(
+        f"Multi-agent first GP found step: {np.mean(multi_agent_first_gp_steps)}"
+        f" +/- {np.std(multi_agent_first_gp_steps)}"
     )
     print(
         "Single-agent phenomenons discovered: "
