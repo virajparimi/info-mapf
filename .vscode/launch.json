@@ -50,7 +50,7 @@
             },
             "args": [
                 "--map_type",
-                "maze-32",
+                "dense",
                 "--logging_level",
                 "debug",
             ],
@@ -67,7 +67,7 @@
             },
             "args": [
                 "--results_pkl",
-                "results_maze-32.pkl",
+                "results_dense.pkl",
             ],
             "console": "integratedTerminal",
             "justMyCode": true
