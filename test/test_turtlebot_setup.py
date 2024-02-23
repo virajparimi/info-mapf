@@ -128,6 +128,10 @@ class PlanDispatchNode:
         ):
             agent_actions = self.rh_ma_vulcan.single_step_planner(ros=True)
             assert agent_actions is not None
+            for agent_id, action in agent_actions.items():
+                print(
+                    f"Agent {agent_id} is executing action {action.action_type.value}"
+                )
             self.execute_turns(agent_actions)
             self.execute_moves(agent_actions)
 

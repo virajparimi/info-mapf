@@ -295,6 +295,9 @@ if __name__ == "__main__":
     results_base_path = (
         os.path.dirname(os.path.abspath(__file__)) + "/../data/all_observed_set/"
     )
+    store_base_path = (
+        os.path.dirname(os.path.abspath(__file__)) + "/../data/map_based_results/"
+    )
     figures_base_path = (
         os.path.dirname(os.path.abspath(__file__)) + "/../figures/testing/"
     )
@@ -666,6 +669,23 @@ if __name__ == "__main__":
     )
     print(
         f"Ratio of expanded nodes to maximum possible nodes: {total_nodes_expanded / max_nodes_generated}"
+    )
+
+    np.savez(
+        store_base_path + args.results_pkl[:-4],
+        multi_agent_steps=multi_agent_steps,
+        single_agent_steps=single_agent_steps,
+        single_agent_ca_steps=single_agent_ca_steps,
+        multi_agent_phenomenons_discovered=multi_agent_phenomenons_discovered,
+        single_agent_phenomenons_discovered=single_agent_phenomenons_discovered,
+        single_agent_ca_phenomenons_discovered=single_agent_ca_phenomenons_discovered,
+        multi_agent_first_gp_steps=multi_agent_first_gp_steps,
+        single_agent_first_gp_steps=single_agent_first_gp_steps,
+        single_agent_ca_first_gp_steps=single_agent_ca_first_gp_steps,
+        ratios=ratios,
+        max_possible_nodes_data=np.array(
+            [total_nodes_generated, total_nodes_expanded, max_nodes_generated]
+        ),
     )
 
     # Now we visualize the paths of the agents for a given sample
