@@ -106,112 +106,116 @@ class MultiAgentVulcan(object):
         self.nodes_expanded = 0
         self.nodes_generated = 0
 
-    def planner(self):
-        while self.timer < self.mission_duration:
-            logging.info(f"Time = {self.timer}")
-            agent_actions = {}
-            # Collect agents within communication range
-            agent_bubbles = self.within_range_agents()
-            # Command each agent to execute their adaptive search algorithm for one step
+    def single_step_planner(self, ros: bool = False) -> Union[Dict[int, Action], None]:
 
-            skip_agent = {agent.id: False for agent in self.agents}
-            for idx, agent in enumerate(self.agents):
-                if (
-                    idx in agent_bubbles.keys() and len(agent_bubbles[idx]) > 1
-                ):  # uniqueness of the agent bubbles is required here!
-                    # Start multi-agent search algorithm with respect to this agent
-                    shared_observations = []
-                    for agent_in_comm_range in agent_bubbles[idx]:
-                        shared_observations += (
-                            agent_in_comm_range.mdp_handle.observations
-                        )
-                    shared_observations = list(set(shared_observations))
-                    # TODO: Which measurement should we use for the locations that are common among these agents?
+        logging.info(f"Time = {self.timer}")
+        agent_actions = {}
+        # Collect agents within communication range
+        agent_bubbles = self.within_range_agents()
+        # Command each agent to execute their adaptive search algorithm for one step
 
-                    horizon = min(
-                        agent.planning_horizon, agent.mission_duration - agent.timer
-                    )
+        skip_agent = {agent.id: False for agent in self.agents}
+        for idx, agent in enumerate(self.agents):
+            if (
+                idx in agent_bubbles.keys() and len(agent_bubbles[idx]) > 1
+            ):  # Uniqueness of the agent bubbles is required here!
+                # Start multi-agent search algorithm with respect to this agent
+                shared_observations = []
+                for agent_in_comm_range in agent_bubbles[idx]:
+                    shared_observations += agent_in_comm_range.mdp_handle.observations
+                shared_observations = list(set(shared_observations))
+                # TODO: Which measurement should we use for the locations that are common among these agents?
 
-                    for agent_in_comm_range in agent_bubbles[idx]:
-                        agent_in_comm_range.mdp_handle.observations = (
-                            shared_observations
-                        )
+                horizon = min(
+                    agent.planning_horizon, agent.mission_duration - agent.timer
+                )
 
-                    start_time = time()
-                    _, best_action = self.multi_agent_search(
-                        agent,
-                        agent_bubbles[idx],
-                        horizon,
-                        shared_observations,
-                    )
-                    end_time = time()
-                    logging.debug(
-                        f"Time taken to execute multi-agent search algorithm: {end_time - start_time}"
-                    )
+                for agent_in_comm_range in agent_bubbles[idx]:
+                    agent_in_comm_range.mdp_handle.observations = shared_observations
 
-                    logging.debug(
-                        f"Total children created for this search: {self.children}"
-                    )
-                    self.children = 0
+                start_time = time()
+                _, best_action = self.multi_agent_search(
+                    agent,
+                    agent_bubbles[idx],
+                    horizon,
+                    shared_observations,
+                )
+                end_time = time()
+                logging.debug(
+                    f"Time taken to execute multi-agent search algorithm: {end_time - start_time}"
+                )
 
-                    assert best_action is not None
+                logging.debug(
+                    f"Total children created for this search: {self.children}"
+                )
+                self.children = 0
 
-                    for agent_in_comm_range in agent_bubbles[idx]:
-                        if agent.id == agent_in_comm_range.id:
+                assert best_action is not None
+
+                for agent_in_comm_range in agent_bubbles[idx]:
+                    if agent.id == agent_in_comm_range.id:
+                        agent_actions[agent_in_comm_range.id] = best_action[
+                            agent_in_comm_range.id
+                        ]
+                    else:
+                        if agent_in_comm_range.id not in agent_bubbles.keys():
                             agent_actions[agent_in_comm_range.id] = best_action[
                                 agent_in_comm_range.id
                             ]
-                        else:
-                            if agent_in_comm_range.id not in agent_bubbles.keys():
-                                agent_actions[agent_in_comm_range.id] = best_action[
-                                    agent_in_comm_range.id
-                                ]
-                                skip_agent[agent_in_comm_range.id] = True
+                            skip_agent[agent_in_comm_range.id] = True
 
-                    logging.debug(
-                        "Ratio of nodes expanded to nodes generated: "
-                        + str(self.nodes_expanded / self.nodes_generated)
-                    )
+                logging.debug(
+                    "Ratio of nodes expanded to nodes generated: "
+                    + str(self.nodes_expanded / self.nodes_generated)
+                )
 
-                elif not skip_agent[agent.id]:
-                    # Re-use vulcan for this single agent
-                    horizon = min(
-                        agent.planning_horizon, agent.mission_duration - agent.timer
-                    )
-                    _, best_action = agent.extract_action(
-                        agent.current_location,
-                        agent.timer,
-                        agent.timer + horizon,
-                        agent.mdp_handle.observations,
-                        deepcopy(agent.grid),
-                        agent.reward_map,
-                    )
+            elif not skip_agent[agent.id]:
+                # Re-use vulcan for this single agent
+                horizon = min(
+                    agent.planning_horizon, agent.mission_duration - agent.timer
+                )
+                _, best_action = agent.extract_action(
+                    agent.current_location,
+                    agent.timer,
+                    agent.timer + horizon,
+                    agent.mdp_handle.observations,
+                    deepcopy(agent.grid),
+                    agent.reward_map,
+                )
 
-                    agent_actions[agent.id] = best_action
+                agent_actions[agent.id] = best_action
 
-            assert len(agent_actions) == len(self.agents)
+        assert len(agent_actions) == len(self.agents)
 
-            # Once we have extracted the best actions for each agent, we execute them
-            old_locations = [agent.current_location for agent in self.agents]
-            old_locations_coords = [
-                self.grid.get_coordinate(location) for location in old_locations
-            ]
-            new_locations = [action.location for action in agent_actions.values()]
-            new_locations_coords = [
-                self.grid.get_coordinate(location) for location in new_locations
-            ]
+        # Once we have extracted the best actions for each agent, we execute them
+        old_locations = [agent.current_location for agent in self.agents]
+        old_locations_coords = [
+            self.grid.get_coordinate(location) for location in old_locations
+        ]
+        new_locations = [action.location for action in agent_actions.values()]
+        new_locations_coords = [
+            self.grid.get_coordinate(location) for location in new_locations
+        ]
 
-            for old_loc in old_locations_coords:
-                self.grid.grid[old_loc[0], old_loc[1]] = True
-            for new_loc in new_locations_coords:
-                self.grid.grid[new_loc[0], new_loc[1]] = False
+        for old_loc in old_locations_coords:
+            self.grid.grid[old_loc[0], old_loc[1]] = True
+        for new_loc in new_locations_coords:
+            self.grid.grid[new_loc[0], new_loc[1]] = False
 
-            for agent in self.agents:
-                agent.current_location = agent_actions[agent.id].location
-                agent.visited_locations.append(agent.current_location)
-                agent.mdp_handle.update(agent.current_location, agent.reward_map)
-                agent.timer += 1
-            self.timer += 1
+        for agent in self.agents:
+            agent.current_location = agent_actions[agent.id].location
+            agent.visited_locations.append(agent.current_location)
+            agent.mdp_handle.update(agent.current_location, agent.reward_map)
+            agent.timer += 1
+
+        self.timer += 1
+
+        if ros:
+            return agent_actions
+
+    def planner(self):
+        while self.timer < self.mission_duration:
+            self.single_step_planner()
 
     def find_minimal_disjoint_sets(
         self, agent_bubbles: List[Set[Agent]]
