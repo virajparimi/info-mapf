@@ -6,6 +6,7 @@ import numpy as np
 from time import time
 import itertools as iter
 from copy import deepcopy
+from numpy.typing import NDArray
 from scipy.special import kl_div
 from utils import get_nearest_locations
 from map import Grid, RewardMap, ActionType
@@ -20,6 +21,7 @@ class MultiAgentSearchNode(object):
         agents_actions: Dict[int, List[str]],
         agent_locations: Dict[int, int],
         grid: Union[Grid, None] = None,
+        use_mcts: bool = False,
     ):
         self.timestep = 0
         self.grid = grid
@@ -32,6 +34,15 @@ class MultiAgentSearchNode(object):
         self._g = np.float64(0.0)
         self._h = np.float64(0.0)
         self._f = np.add(self._g, self._h)
+
+        if use_mcts:
+            self.pulls = 1
+            self.valid_action_prefixes: List[Any] = []
+            self.valid_action_prefixes_pulls: NDArray[Any] = np.zeros(0)
+            self.valid_action_prefixes_rewards: NDArray[Any] = np.zeros(0)
+            self.valid_action_prefixes_childs: List[
+                Union[MultiAgentSearchNode, None]
+            ] = []
 
     @property
     def g(self):
@@ -94,6 +105,7 @@ class MultiAgentVulcan(object):
         reward_map: RewardMap,
         agents: List[Agent],
         communication_range: int = 5,
+        use_mcts: bool = False,
     ):
         self.timer = 0
         self.grid = grid
@@ -105,6 +117,9 @@ class MultiAgentVulcan(object):
         self.children = 0
         self.nodes_expanded = 0
         self.nodes_generated = 0
+
+        self.use_mcts = use_mcts
+        self.num_mcts_nodes = 0
 
     def single_step_planner(self, ros: bool = False) -> Union[Dict[int, Action], None]:
 
@@ -134,13 +149,22 @@ class MultiAgentVulcan(object):
                     agent_in_comm_range.mdp_handle.observations = shared_observations
 
                 start_time = time()
-                _, best_action = self.multi_agent_search(
-                    agent,
-                    agent_bubbles[idx],
-                    horizon,
-                    shared_observations,
-                )
+                if self.use_mcts:
+                    _, best_action = self.mcts_multi_agent_search(
+                        agent,
+                        agent_bubbles[idx],
+                        horizon,
+                        shared_observations,
+                    )
+                else:
+                    _, best_action = self.multi_agent_search(
+                        agent,
+                        agent_bubbles[idx],
+                        horizon,
+                        shared_observations,
+                    )
                 end_time = time()
+
                 logging.debug(
                     f"Time taken to execute multi-agent search algorithm: {end_time - start_time}"
                 )
@@ -164,10 +188,11 @@ class MultiAgentVulcan(object):
                             ]
                             skip_agent[agent_in_comm_range.id] = True
 
-                logging.debug(
-                    "Ratio of nodes expanded to nodes generated: "
-                    + str(self.nodes_expanded / self.nodes_generated)
-                )
+                if not self.use_mcts:
+                    logging.debug(
+                        "Ratio of nodes expanded to nodes generated: "
+                        + str(self.nodes_expanded / self.nodes_generated)
+                    )
 
             elif not skip_agent[agent.id]:
                 # Re-use vulcan for this single agent
@@ -569,6 +594,261 @@ class MultiAgentVulcan(object):
 
         return (g_val, agents_future_measurements)
 
+    def construct_mcts_node(
+        self,
+        parent: Union[MultiAgentSearchNode, None],
+        action_prefixes: Dict[int, List[str]],
+        agent_locations: Dict[int, int],
+        agent_bubbles: List[Agent],
+        planning_horizon: int,
+        shared_observations: List[Observation],
+    ) -> MultiAgentSearchNode:
+
+        self.num_mcts_nodes += 1
+
+        node = MultiAgentSearchNode(
+            parent, action_prefixes, agent_locations, use_mcts=True
+        )
+
+        if parent is not None:
+            node.timestep = parent.timestep + 1
+
+        recursive_grid_object = deepcopy(
+            agent_bubbles[0].grid
+        )  # Take any agent's grid map
+
+        # Update the locations of the agents in the map as its required for updated valid neighbor computation
+        for other_agent in agent_bubbles:
+            if node.parent is not None:
+                older_coords = recursive_grid_object.get_coordinate(
+                    node.parent.agent_locations[other_agent.id]
+                )
+                new_coords = recursive_grid_object.get_coordinate(
+                    node.agent_locations[other_agent.id]
+                )
+                recursive_grid_object.grid[older_coords[0], older_coords[1]] = True
+                recursive_grid_object.grid[new_coords[0], new_coords[1]] = False
+
+        node.grid = recursive_grid_object
+
+        valid_actions = set()
+        for agent_in_comm_range in agent_bubbles:
+            valid_neighbors = node.grid.get_neighbors(
+                node.agent_locations[agent_in_comm_range.id]
+            )
+            for valid_neighbor in valid_neighbors:
+                valid_actions.add(valid_neighbor.action_type.value)
+        valid_actions = list(valid_actions)
+
+        valid_action_prefixes = []
+        for action_prefixes in node.extract_action_prefix_extensions(valid_actions):
+            # Validate whether the action prefix can be executed
+            next_locations = {}
+            invalid_action_prefix = False
+            for agent_idx, agent_in_comm_range in enumerate(agent_bubbles):
+                action = action_prefixes[agent_in_comm_range.id][-1]
+                next_pos = node.grid.extract_next_location(
+                    node.agent_locations[agent_in_comm_range.id],
+                    action,
+                )
+                next_pos_coord = node.grid.get_coordinate(next_pos)
+                if (
+                    next_pos < 0
+                    or next_pos >= node.grid.map_size
+                    or node.grid.get_manhattan_distance(
+                        node.agent_locations[agent_in_comm_range.id],
+                        next_pos,
+                    )
+                    > 1
+                    or not node.grid.obstacle_map[next_pos_coord[0], next_pos_coord[1]]
+                ):
+                    invalid_action_prefix = True
+                    break
+
+                next_locations[agent_in_comm_range.id] = next_pos
+
+            if invalid_action_prefix:
+                continue
+
+            # Check for vertex collisions and edge collisions given the paths of these agents
+            for agent_i in agent_bubbles:
+                for agent_j in agent_bubbles:
+                    if agent_i.id == agent_j.id:
+                        continue
+                    # Vertex collision
+                    if next_locations[agent_i.id] == next_locations[agent_j.id]:
+                        invalid_action_prefix = True
+                        break
+                    # Edge collision
+                    if (
+                        node.agent_locations[agent_i.id] == next_locations[agent_j.id]
+                        and next_locations[agent_i.id]
+                        == node.agent_locations[agent_j.id]
+                    ):
+                        invalid_action_prefix = True
+                        break
+
+            if invalid_action_prefix:
+                continue
+
+            valid_action_prefixes.append(action_prefixes)
+
+        node.valid_action_prefixes = valid_action_prefixes
+        node.valid_action_prefixes_childs = [
+            None for _ in range(len(valid_action_prefixes))
+        ]
+        node.valid_action_prefixes_pulls = np.zeros(len(node.valid_action_prefixes))
+        node.valid_action_prefixes_rewards = np.zeros(len(node.valid_action_prefixes))
+
+        return node
+
+    def mcts_multi_agent_search(
+        self,
+        target_agent: Agent,
+        agent_bubbles: List[Agent],
+        planning_horizon: int,
+        shared_observations: List[Observation],
+    ) -> Tuple[np.float64, Union[Dict[int, Action], None]]:
+        """
+        Performs the multi-agent search algorithm for a single agent assuming they are
+        in communication range of other agents using MCTS
+        :param target_agent: The agent for which the multi-agent search algorithm is being performed
+        :param agent_bubbles: List of agents that the agent is within communication range including itself
+        :param planning_horizon: Planning horizon h
+        :param shared_observations: List of shared observations between the agents inside the communication range
+        """
+
+        logging.debug(
+            "Starting multi-agent search algorithm using MCTS for "
+            + str(len(agent_bubbles))
+            + " agents"
+        )
+
+        start_time = time()
+
+        root_node = self.construct_mcts_node(
+            None,
+            {agent.id: [] for agent in agent_bubbles},
+            {agent.id: agent.current_location for agent in agent_bubbles},
+            agent_bubbles,
+            planning_horizon,
+            shared_observations,
+        )
+
+        while time() - start_time < len(agent_bubbles) - 1.0:
+            self.sample_state(
+                root_node, agent_bubbles, planning_horizon, shared_observations
+            )
+
+        best_action = {
+            agent.id: Action(ActionType.Wait, agent.current_location)
+            for agent in agent_bubbles
+        }
+
+        best_action_index = np.argmax(root_node.valid_action_prefixes_rewards)
+
+        best_action_strs = root_node.valid_action_prefixes[best_action_index]
+        best_gain = root_node.valid_action_prefixes_rewards[best_action_index]
+
+        for agent_in_comm_range in agent_bubbles:
+            best_action_str = best_action_strs[agent_in_comm_range.id][0]
+            best_action_location = agent_in_comm_range.grid.extract_next_location(
+                agent_in_comm_range.current_location,
+                best_action_str,
+            )
+            if best_action_str == ActionType.Up.value:
+                best_action_type = ActionType.Up
+            elif best_action_str == ActionType.Down.value:
+                best_action_type = ActionType.Down
+            elif best_action_str == ActionType.Left.value:
+                best_action_type = ActionType.Left
+            elif best_action_str == ActionType.Right.value:
+                best_action_type = ActionType.Right
+            else:
+                best_action_type = ActionType.Wait
+            best_action[agent_in_comm_range.id] = Action(
+                action_type=best_action_type, location=best_action_location
+            )
+        return best_gain, best_action
+
+    def sample_state(
+        self,
+        node: MultiAgentSearchNode,
+        agent_bubbles: List[Agent],
+        planning_horizon: int,
+        shared_observations: List[Observation],
+    ) -> np.float64:
+
+        reward = np.float64(0.0)
+
+        if node.timestep >= planning_horizon:
+
+            # Compute the g-val here!
+            reward = self.compute_multi_agent_information_gain(
+                node, agent_bubbles, planning_horizon, shared_observations
+            )[0]
+
+        if node.timestep < planning_horizon:
+
+            # Continue the rollout
+            epsilon = 1e-5
+            action_to_take = np.argmax(
+                node.valid_action_prefixes_rewards
+                + np.sqrt(
+                    2.0
+                    * np.log(node.pulls + epsilon)
+                    / (node.valid_action_prefixes_pulls + epsilon)
+                )
+            )
+
+            action_prefixes = node.valid_action_prefixes[action_to_take]
+
+            assert node.grid is not None
+
+            next_locations = {}
+            for agent_in_comm_range in agent_bubbles:
+                action = action_prefixes[agent_in_comm_range.id][-1]
+                next_pos = node.grid.extract_next_location(
+                    node.agent_locations[agent_in_comm_range.id],
+                    action,
+                )
+                next_locations[agent_in_comm_range.id] = next_pos
+
+            if node.valid_action_prefixes_childs[action_to_take] is None:
+                child_node = self.construct_mcts_node(
+                    node,
+                    action_prefixes,
+                    next_locations,
+                    agent_bubbles,
+                    planning_horizon,
+                    shared_observations,
+                )
+                node.valid_action_prefixes_childs[action_to_take] = child_node
+            else:
+                child_node = node.valid_action_prefixes_childs[action_to_take]
+
+            assert child_node is not None
+            result = self.sample_state(
+                child_node,
+                agent_bubbles,
+                planning_horizon,
+                shared_observations,
+            )
+
+            updated_q = (
+                node.valid_action_prefixes_rewards[action_to_take]
+                * node.valid_action_prefixes_pulls[action_to_take]
+                + result
+            ) / (node.valid_action_prefixes_pulls[action_to_take] + 1)
+            node.valid_action_prefixes_rewards[action_to_take] = updated_q
+            node.valid_action_prefixes_pulls[action_to_take] += 1
+
+            reward += result
+
+        node.pulls += 1
+
+        return reward
+
     def multi_agent_search(
         self,
         target_agent: Agent,
@@ -644,8 +924,18 @@ class MultiAgentVulcan(object):
                                 best_action_str,
                             )
                         )
+                        if best_action_str == ActionType.Up.value:
+                            best_action_type = ActionType.Up
+                        elif best_action_str == ActionType.Down.value:
+                            best_action_type = ActionType.Down
+                        elif best_action_str == ActionType.Left.value:
+                            best_action_type = ActionType.Left
+                        elif best_action_str == ActionType.Right.value:
+                            best_action_type = ActionType.Right
+                        else:
+                            best_action_type = ActionType.Wait
                         best_action[agent_in_comm_range.id] = Action(
-                            best_action_str, best_action_location
+                            action_type=best_action_type, location=best_action_location
                         )
 
             else:

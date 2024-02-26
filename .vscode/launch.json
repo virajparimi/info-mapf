@@ -34,8 +34,8 @@
                 "single-small",
                 "--measurement_noise",
                 "0.2",
-                // "--logging_level",
-                // "debug"
+                "--logging_level",
+                "debug"
             ],
             "console": "integratedTerminal",
             "justMyCode": true
@@ -50,7 +50,7 @@
             },
             "args": [
                 "--map_type",
-                "dense",
+                "original",
                 "--logging_level",
                 "debug",
             ],
@@ -67,7 +67,8 @@
             },
             "args": [
                 "--results_pkl",
-                "results_dense.pkl",
+                // "results_dense.pkl",
+                "augmented_results_original.pkl"
             ],
             "console": "integratedTerminal",
             "justMyCode": true
