@@ -337,8 +337,7 @@ if __name__ == "__main__":
     ratios = []
     total_nodes_expanded, total_nodes_generated, max_nodes_generated = 0, 0, 0
 
-    # mission_duration = statistics.mission_duration
-    mission_duration = 25
+    mission_duration = statistics.mission_duration
     for sample in range(1, num_samples):
 
         gp_locations = statistics.stats[sample].gp_locations
