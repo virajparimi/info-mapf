@@ -268,8 +268,8 @@ def augment_sample(
 
     if not os.path.isfile(filename):
         augmented_statistics = AugmentedRealWorldStatistics(
-            rows=parameter["rows"],
-            cols=parameter["cols"],
+            rows=rows,
+            cols=cols,
             max_gps=parameter["max_gps"],
             num_agents=parameter["num_agents"],
             dataset_name=parameter["dataset_name"],
