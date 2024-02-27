@@ -340,7 +340,9 @@ def augment_sample(parameter: Dict[str, Any], sample_id: int, statistics: Statis
             "wb",
         ) as f:
             pickle.dump(augmented_statistics, f)
-        logging.info("Results saved. Size of results: %d", len(statistics.stats))
+        logging.info(
+            "Results saved. Size of results: %d", len(augmented_statistics.stats)
+        )
     else:
         with open(
             filename,
