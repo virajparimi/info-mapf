@@ -15,6 +15,7 @@ sys.path.append(os.path.join(os.path.dirname(os.path.dirname(__file__)), "../src
 from agent import Agent  # NOQA
 from utils import generate_map  # NOQA
 from rh_ma_vulcan import MultiAgentVulcan  # NOQA
+from rh_sa_vulcan import SingleAgentVulcan  # NOQA
 from map import Grid, RewardMap, Parameters, Action, ActionType  # NOQA
 
 
@@ -28,6 +29,7 @@ class PlanDispatchNode:
         publish_rate: int = 10,
         step_size: float = 0.3,  # meters
         turn_time: float = 10.0,  # seconds
+        planner: str = "rh_ma_vulcan",
     ):
 
         self.speed = speed
@@ -79,19 +81,32 @@ class PlanDispatchNode:
             8,
             8,
             4,
-            2,
+            len(agent_namespaces),
             25,
             5,
         )
 
         self.agent_locations = [(0, 0), (7, 7)]
 
+        if self.num_agents > len(self.agent_locations) and self.num_agents == 3:
+            self.agent_locations += [(0, 7)]
+            self.max_gps = 5
+        elif self.num_agents > len(self.agent_locations) and self.num_agents == 4:
+            self.agent_locations += [(7, 0), (7, 0)]
+            self.max_gps = 6
+
+        gp_locations = [(1, 1), (6, 2), (5, 5), (2, 6)]
+        if self.max_gps == 5:
+            gp_locations += [(1, 6)]
+        elif self.max_gps == 6:
+            gp_locations += [(1, 6), (6, 1)]
+
         self.grid, self.reward_map = generate_map(
             self.rows,
             self.cols,
             agent_locations=self.agent_locations,
             gp_means=np.ones(self.max_gps).tolist(),
-            gp_locations=[(1, 1), (6, 2), (5, 5), (2, 6)],
+            gp_locations=gp_locations,
             parameters=self.params,
         )
 
@@ -109,12 +124,27 @@ class PlanDispatchNode:
             )
             self.vulcan_agents.append(vulcan_agent)
 
-        self.rh_ma_vulcan = MultiAgentVulcan(
-            grid=self.grid,
-            reward_map=self.reward_map,
-            agents=self.vulcan_agents,
-            communication_range=self.communication_range,
-        )
+        if planner == "rh_ma_vulcan":
+            self.planner = MultiAgentVulcan(
+                grid=self.grid,
+                reward_map=self.reward_map,
+                agents=self.vulcan_agents,
+                communication_range=self.communication_range,
+            )
+        elif planner == "rh_mcts_ma_vulcan":
+            self.planner = MultiAgentVulcan(
+                grid=self.grid,
+                reward_map=self.reward_map,
+                agents=self.vulcan_agents,
+                communication_range=self.communication_range,
+                use_mcts=True,
+            )
+        elif planner == "sa_ca_vulcan":
+            self.planner = SingleAgentVulcan(
+                grid=self.grid,
+                reward_map=self.reward_map,
+                agents=self.vulcan_agents,
+            )
 
         self.agent_colors = ["r", "b", "g", "y", "m", "c", "k"]
 
@@ -163,10 +193,8 @@ class PlanDispatchNode:
 
     def run_planner(self):
 
-        while (
-            self.rh_ma_vulcan.timer < self.mission_duration and not rospy.is_shutdown()
-        ):
-            agent_actions = self.rh_ma_vulcan.single_step_planner(ros=True)
+        while self.planner.timer < self.mission_duration and not rospy.is_shutdown():
+            agent_actions = self.planner.single_step_planner(ros=True)
             assert agent_actions is not None
 
             # For debugging only!
@@ -337,3 +365,10 @@ if __name__ == "__main__":
 
     node = PlanDispatchNode("cmd_vel", {0: "tb3_1", 1: "tb3_5"})
     node.run_planner()
+
+    # You can also run this with more agents and different planners
+    # 1. "rh_ma_vulcan"
+    # 2. "rh_mcts_ma_vulcan"
+    # 3. "sa_ca_vulcan"
+
+    # When recording the videos make sure to "clap" once the agents take a step to help with video synchronization
