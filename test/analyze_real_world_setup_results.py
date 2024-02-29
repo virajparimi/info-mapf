@@ -18,9 +18,12 @@ sys.path.append(os.path.join(os.path.dirname(os.path.dirname(__file__)), "src"))
 
 from agent import Agent  # NOQA
 from rh_ma_vulcan import MultiAgentVulcan  # NOQA
-from test_mapf_suite import SampleStats, VulcanStats  # NOQA
-from test_real_world_setup import RealWorldStatistics  # NOQA
 from map import Grid, RewardMap, Parameters, ActionType  # NOQA
+from test_mapf_suite import SampleStats, AugmentedSampleStats, VulcanStats  # NOQA
+from test_real_world_setup import (  # NOQA
+    RealWorldStatistics,
+    AugmentedRealWorldStatistics,
+)  # NOQA
 from analyze_mapf_suite_results import (  # NOQA
     linearize_coordinate,
     within_range_agents,
@@ -35,7 +38,7 @@ from utils import (  # NOQA
 
 def analyze_results(
     sample_to_visualize: int,
-    statistics: RealWorldStatistics,
+    statistics: AugmentedRealWorldStatistics,
     agent_locations: List[Tuple[int, int]],
     reward_map: RewardMap,
     agent_colors: List[str],
@@ -53,6 +56,12 @@ def analyze_results(
         if type_of_analysis == "multi":
             vulcan_path = (
                 statistics.stats[sample_to_visualize].multi_agent_stats[agent_idx].path
+            )
+        elif type_of_analysis == "multi_mcts":
+            vulcan_path = (
+                statistics.stats[sample_to_visualize]
+                .multi_agent_mcts_stats[agent_idx]
+                .path
             )
         elif type_of_analysis == "single":
             vulcan_path = (
@@ -269,6 +278,9 @@ if __name__ == "__main__":
     results_base_path = (
         os.path.dirname(os.path.abspath(__file__)) + "/../data/all_observed_set/"
     )
+    store_base_path = (
+        os.path.dirname(os.path.abspath(__file__)) + "/../data/map_based_results/"
+    )
     figures_base_path = (
         os.path.dirname(os.path.abspath(__file__)) + "/../figures/testing/"
     )
@@ -328,12 +340,29 @@ if __name__ == "__main__":
 
     num_samples = len(statistics.stats)
 
-    multi_agent_steps, single_agent_steps, single_agent_ca_steps = [], [], []
+    (
+        multi_agent_steps,
+        multi_agent_mcts_steps,
+        single_agent_steps,
+        single_agent_ca_steps,
+    ) = ([], [], [], [])
+    (
+        multi_agent_first_gp_steps,
+        multi_agent_mcts_first_gp_steps,
+        single_agent_first_gp_steps,
+        single_agent_ca_first_gp_steps,
+    ) = (
+        [],
+        [],
+        [],
+        [],
+    )
     (
         multi_agent_phenomenons_discovered,
+        multi_agent_mcts_phenomenons_discovered,
         single_agent_phenomenons_discovered,
         single_agent_ca_phenomenons_discovered,
-    ) = ([], [], [])
+    ) = ([], [], [], [])
     ratios = []
     total_nodes_expanded, total_nodes_generated, max_nodes_generated = 0, 0, 0
 
@@ -354,19 +383,27 @@ if __name__ == "__main__":
         sample_multi_agent_phenomenons_discovered = set()
         sample_single_agent_phenomenons_discovered = set()
         sample_single_agent_ca_phenomenons_discovered = set()
+        sample_multi_agent_mcts_phenomenons_discovered = set()
 
         # Verify that the paths of agents do not lead to collisions!
         (
             multi_agent_last_valid_step,
+            multi_agent_mcts_last_valid_step,
             single_agent_last_valid_step,
             single_agent_ca_last_valid_step,
         ) = (
             mission_duration,
             mission_duration,
             mission_duration,
+            mission_duration,
         )
 
-        multi_collision, single_collision, single_ca_collision = False, False, False
+        multi_collision, multi_mcts_collision, single_collision, single_ca_collision = (
+            False,
+            False,
+            False,
+            False,
+        )
         for agent_i in range(len(agent_locations)):
             for agent_j in range(len(agent_locations)):
                 if agent_i == agent_j:
@@ -396,6 +433,35 @@ if __name__ == "__main__":
                 )
                 multi_agent_last_valid_step = min(
                     multi_agent_last_valid_step, multi_agent_paths_valid_steps[0]
+                )
+
+                multi_agent_mcts_paths_valid_steps = (
+                    validate_paths(
+                        (
+                            agent_i,
+                            statistics.stats[sample]
+                            .multi_agent_mcts_stats[agent_i]
+                            .path,
+                        ),
+                        (
+                            agent_j,
+                            statistics.stats[sample]
+                            .multi_agent_mcts_stats[agent_j]
+                            .path,
+                        ),
+                        mission_duration,
+                        maze=maze,
+                    ),
+                )
+
+                multi_mcts_collision = (
+                    True
+                    if multi_agent_mcts_paths_valid_steps[0] < mission_duration
+                    else False
+                )
+                multi_agent_mcts_last_valid_step = min(
+                    multi_agent_mcts_last_valid_step,
+                    multi_agent_mcts_paths_valid_steps[0],
                 )
 
                 single_agent_paths_valid_steps = (
@@ -454,9 +520,10 @@ if __name__ == "__main__":
 
         (
             multi_last_gp_found_step,
+            multi_mcts_last_gp_found_step,
             single_last_gp_found_step,
             single_ca_last_gp_found_step,
-        ) = (0, 0, 0)
+        ) = (0, 0, 0, 0)
 
         local_agents_gp_found = [mission_duration for _ in range(len(agent_locations))]
         for step in range(multi_agent_last_valid_step):
@@ -495,6 +562,26 @@ if __name__ == "__main__":
                         )
 
         avg_multi_agent_first_gp_found_step = np.sum(local_agents_gp_found) / len(
+            agent_locations
+        )
+
+        local_agents_gp_found = [mission_duration for _ in range(len(agent_locations))]
+        for step in range(multi_agent_mcts_last_valid_step):
+            for agent in range(len(agent_locations)):
+                coord = (
+                    statistics.stats[sample].multi_agent_mcts_stats[agent].path[step]
+                )
+                coord_compare = (coord[0], coord[1])
+                if (
+                    coord_compare in gp_locations
+                    and coord_compare
+                    not in sample_multi_agent_mcts_phenomenons_discovered
+                ):
+                    multi_mcts_last_gp_found_step = step
+                    sample_multi_agent_mcts_phenomenons_discovered.add(coord_compare)
+                    if local_agents_gp_found[agent] == mission_duration:
+                        local_agents_gp_found[agent] = step
+        avg_multi_agent_mcts_first_gp_found_step = np.sum(local_agents_gp_found) / len(
             agent_locations
         )
 
@@ -540,12 +627,20 @@ if __name__ == "__main__":
         multi_agent_phenomenons_discovered.append(
             len(sample_multi_agent_phenomenons_discovered)
         )
+        multi_agent_mcts_phenomenons_discovered.append(
+            len(sample_multi_agent_mcts_phenomenons_discovered)
+        )
         single_agent_phenomenons_discovered.append(
             len(sample_single_agent_phenomenons_discovered)
         )
         single_agent_ca_phenomenons_discovered.append(
             len(sample_single_agent_ca_phenomenons_discovered)
         )
+
+        multi_agent_first_gp_steps.append(avg_multi_agent_first_gp_found_step)
+        multi_agent_mcts_first_gp_steps.append(avg_multi_agent_mcts_first_gp_found_step)
+        single_agent_first_gp_steps.append(avg_single_agent_first_gp_found_step)
+        single_agent_ca_first_gp_steps.append(avg_single_agent_ca_first_gp_found_step)
 
         if (
             len(sample_multi_agent_phenomenons_discovered) != len(gp_locations)
@@ -554,6 +649,14 @@ if __name__ == "__main__":
             multi_agent_steps.append(mission_duration)
         else:
             multi_agent_steps.append(multi_last_gp_found_step)
+
+        if (
+            len(sample_multi_agent_mcts_phenomenons_discovered) != len(gp_locations)
+            or multi_mcts_collision
+        ):
+            multi_agent_mcts_steps.append(mission_duration)
+        else:
+            multi_agent_mcts_steps.append(multi_mcts_last_gp_found_step)
 
         if (
             len(sample_single_agent_phenomenons_discovered) != len(gp_locations)
@@ -574,9 +677,13 @@ if __name__ == "__main__":
     # Compile the results and print them
     ratios = np.array(ratios)
     multi_agent_steps = np.array(multi_agent_steps)
+    multi_agent_mcts_steps = np.array(multi_agent_mcts_steps)
     single_agent_steps = np.array(single_agent_steps)
     single_agent_ca_steps = np.array(single_agent_ca_steps)
     multi_agent_phenomenons_discovered = np.array(multi_agent_phenomenons_discovered)
+    multi_agent_mcts_phenomenons_discovered = np.array(
+        multi_agent_mcts_phenomenons_discovered
+    )
     single_agent_phenomenons_discovered = np.array(single_agent_phenomenons_discovered)
     single_agent_ca_phenomenons_discovered = np.array(
         single_agent_ca_phenomenons_discovered
@@ -600,6 +707,25 @@ if __name__ == "__main__":
         f"Multi-agent steps: {np.mean(multi_agent_steps)} +/- {np.std(multi_agent_steps)}"
     )
     print(
+        f"Multi-agent with MCTS steps: {np.mean(multi_agent_mcts_steps)} +/- {np.std(multi_agent_mcts_steps)}"
+    )
+    print(
+        f"Single-agent first GP found step: {np.mean(single_agent_first_gp_steps)}"
+        f" +/- {np.std(single_agent_first_gp_steps)}"
+    )
+    print(
+        f"Single-agent with collision avoidance first GP found step: {np.mean(single_agent_ca_first_gp_steps)}"
+        f" +/- {np.std(single_agent_ca_first_gp_steps)}"
+    )
+    print(
+        f"Multi-agent first GP found step: {np.mean(multi_agent_first_gp_steps)}"
+        f" +/- {np.std(multi_agent_first_gp_steps)}"
+    )
+    print(
+        f"Multi-agent with MCTS first GP found step: {np.mean(multi_agent_mcts_first_gp_steps)}"
+        f" +/- {np.std(multi_agent_mcts_first_gp_steps)}"
+    )
+    print(
         "Single-agent phenomenons discovered: "
         f"{np.mean(single_agent_phenomenons_discovered)} +/- {np.std(single_agent_phenomenons_discovered)}"
     )
@@ -612,6 +738,10 @@ if __name__ == "__main__":
         f"{np.mean(multi_agent_phenomenons_discovered)} +/- {np.std(multi_agent_phenomenons_discovered)}"
     )
     print(
+        f"Multi-agent with MCTS phenomenons discovered: "
+        f"{np.mean(multi_agent_mcts_phenomenons_discovered)} +/- {np.std(multi_agent_mcts_phenomenons_discovered)}"
+    )
+    print(
         f"Ratio of expanded nodes to generated nodes: {np.mean(ratios)} +/- {np.std(ratios)}"
     )
     print(
@@ -619,6 +749,26 @@ if __name__ == "__main__":
     )
     print(
         f"Ratio of expanded nodes to maximum possible nodes: {total_nodes_expanded / max_nodes_generated}"
+    )
+
+    np.savez(
+        store_base_path + args.results_pkl[:-4],
+        multi_agent_steps=multi_agent_steps,
+        multi_agent_mcts_steps=multi_agent_mcts_steps,
+        single_agent_steps=single_agent_steps,
+        single_agent_ca_steps=single_agent_ca_steps,
+        multi_agent_phenomenons_discovered=multi_agent_phenomenons_discovered,
+        multi_agent_mcts_phenomenons_discovered=multi_agent_mcts_phenomenons_discovered,
+        single_agent_phenomenons_discovered=single_agent_phenomenons_discovered,
+        single_agent_ca_phenomenons_discovered=single_agent_ca_phenomenons_discovered,
+        multi_agent_first_gp_steps=multi_agent_first_gp_steps,
+        multi_agent_mcts_first_gp_steps=multi_agent_mcts_first_gp_steps,
+        single_agent_first_gp_steps=single_agent_first_gp_steps,
+        single_agent_ca_first_gp_steps=single_agent_ca_first_gp_steps,
+        ratios=ratios,
+        max_possible_nodes_data=np.array(
+            [total_nodes_generated, total_nodes_expanded, max_nodes_generated]
+        ),
     )
 
     # Now we visualize the paths of the agents for a given sample
@@ -709,6 +859,17 @@ if __name__ == "__main__":
         [zz, zz_obstacle] if maze is not None else [zz],
         figures_base_path + "rh-ma-vulcan-" + args.results_pkl[:-4],
         type_of_analysis="multi",
+    )
+
+    analyze_results(
+        sample_to_visualize,
+        statistics,
+        agent_locations,
+        reward_map,
+        agent_colors,
+        [zz, zz_obstacle] if maze is not None else [zz],
+        figures_base_path + "rh-ma-mcts-vulcan-" + args.results_pkl[:-4],
+        type_of_analysis="multi_mcts",
     )
 
     analyze_results(

@@ -748,7 +748,7 @@ if __name__ == "__main__":
         f" +/- {np.std(multi_agent_first_gp_steps)}"
     )
     print(
-        f"Multi-agent first GP found step: {np.mean(multi_agent_mcts_first_gp_steps)}"
+        f"Multi-agent with MCTS first GP found step: {np.mean(multi_agent_mcts_first_gp_steps)}"
         f" +/- {np.std(multi_agent_mcts_first_gp_steps)}"
     )
     print(
@@ -764,7 +764,7 @@ if __name__ == "__main__":
         f"{np.mean(multi_agent_phenomenons_discovered)} +/- {np.std(multi_agent_phenomenons_discovered)}"
     )
     print(
-        "Multi-agent phenomenons discovered: "
+        "Multi-agent with MCTS phenomenons discovered: "
         f"{np.mean(multi_agent_mcts_phenomenons_discovered)} +/- {np.std(multi_agent_mcts_phenomenons_discovered)}"
     )
     print(
