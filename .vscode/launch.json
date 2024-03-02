@@ -98,7 +98,7 @@
             },
             "args": [
                 "--results_pkl",
-                "augmented_results_real-world-dataset.xyz.pkl",
+                "augmented_results_boston-harbor.xyz.pkl",
             ],
             "console": "integratedTerminal",
             "justMyCode": true

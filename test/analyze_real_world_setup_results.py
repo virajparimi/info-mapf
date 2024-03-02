@@ -318,25 +318,27 @@ if __name__ == "__main__":
     dataset_name = statistics.dataset_name
     cell_size_degrees = statistics.cell_size_degrees
     obstacle_threshold = statistics.obstacle_threshold
-    if "real-world" in dataset_name:
+    if "boston-harbor" in dataset_name:
         header = ["SURVEY", "LON", "LAT", "DEPTH"]
+    elif "galveston-bay" in dataset_name:
+        header = ["SURVEY", "LAT", "LON", "DEPTH", "QUALITY_CODE", "ACTIVE"]
+    else:
+        raise ValueError("Unknown dataset name")
 
-        dataframe = load_data_to_pandas(dataset_base_path + dataset_name, header)
-        for head in header:
-            if head != "SURVEY":
-                dataframe[head] = dataframe[head].astype(float)
+    dataframe = load_data_to_pandas(dataset_base_path + dataset_name, header)
+    for head in header:
+        if head != "SURVEY":
+            dataframe[head] = dataframe[head].astype(float)
 
-        rows, cols = extract_rows_and_cols_from_data(
-            dataframe, bounds, cell_size_degrees
-        )
+    rows, cols = extract_rows_and_cols_from_data(dataframe, bounds, cell_size_degrees)
 
-        grid = extract_grid_from_data(
-            dataframe,
-            bounds,
-            cell_size_degrees,
-            obstacle_threshold,
-        )
-        maze = grid.grid
+    grid = extract_grid_from_data(
+        dataframe,
+        bounds,
+        cell_size_degrees,
+        obstacle_threshold,
+    )
+    maze = grid.grid
 
     num_samples = len(statistics.stats)
 

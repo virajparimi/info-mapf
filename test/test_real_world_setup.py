@@ -65,7 +65,7 @@ from map import Grid, RewardMap, Parameters  # NOQA
 def setup_experiment_parameters(
     dataset_name: str,
 ) -> Tuple[int, int, int, int, int, List[str], Tuple[float, float, float, float]]:
-    if dataset_name == "real-world-dataset.xyz":
+    if dataset_name == "boston-harbor.xyz":
         (
             max_gps,
             num_agents,
@@ -82,6 +82,24 @@ def setup_experiment_parameters(
             15,
             ["SURVEY", "LON", "LAT", "DEPTH"],
             (42.344, 42.355, -70.89, -70.876),
+        )
+    elif dataset_name == "galveston-bay.xyz":
+        (
+            max_gps,
+            num_agents,
+            mission_duration,
+            communication_range,
+            obstacle_threshold,
+            header,
+            bounds,
+        ) = (
+            30,
+            4,
+            150,
+            5,
+            2,
+            ["SURVEY", "LAT", "LON", "DEPTH", "QUALITY_CODE", "ACTIVE"],
+            (29.295284, 29.383748, -94.889612, -94.832103),
         )
     else:
         raise ValueError(f"Dataset {dataset_name} is either not supported or invalid")
@@ -507,8 +525,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--dataset_name",
         type=str,
-        default="real-world-dataset.xyz",
-        choices=["real-world-dataset.xyz"],
+        default="boston-harbor.xyz",
+        choices=["boston-harbor.xyz", "galveston-bay.xyz"],
         help="Which real-world dataset to use",
     )
 
