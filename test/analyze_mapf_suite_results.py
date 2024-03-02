@@ -110,7 +110,7 @@ def within_range_agents(
 
 def analyse_results(
     sample_to_visualize: int,
-    statistics: Statistics,
+    statistics: AugmentedStatistics,
     agent_locations: List[Tuple[int, int]],
     reward_map: RewardMap,
     agent_colors: List[str],
@@ -125,6 +125,12 @@ def analyse_results(
         if type_of_analysis == "multi":
             vulcan_path = (
                 statistics.stats[sample_to_visualize].multi_agent_stats[agent_idx].path
+            )
+        elif type_of_analysis == "multi_mcts":
+            vulcan_path = (
+                statistics.stats[sample_to_visualize]
+                .multi_agent_mcts_stats[agent_idx]
+                .path
             )
         elif type_of_analysis == "single":
             vulcan_path = (
@@ -299,11 +305,9 @@ def validate_paths(
 
 
 if __name__ == "__main__":
-    results_base_path = (
-        os.path.dirname(os.path.abspath(__file__)) + "/../data/all_observed_set/"
-    )
+    results_base_path = os.path.dirname(os.path.abspath(__file__)) + "/../data/results/"
     store_base_path = (
-        os.path.dirname(os.path.abspath(__file__)) + "/../data/map_based_results/"
+        os.path.dirname(os.path.abspath(__file__)) + "/../data/results_npz/"
     )
     figures_base_path = (
         os.path.dirname(os.path.abspath(__file__)) + "/../figures/testing/"
@@ -885,6 +889,17 @@ if __name__ == "__main__":
         [zz, zz_obstacle] if maze is not None else [zz],
         figures_base_path + "rh-ma-vulcan-" + args.results_pkl[:-4],
         type_of_analysis="multi",
+    )
+
+    analyse_results(
+        sample_to_visualize,
+        statistics,
+        agent_locations,
+        reward_map,
+        agent_colors,
+        [zz, zz_obstacle] if maze is not None else [zz],
+        figures_base_path + "rh-ma-mcts-vulcan-" + args.results_pkl[:-4],
+        type_of_analysis="multi_mcts",
     )
 
     # Analysis for single-agent

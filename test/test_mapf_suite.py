@@ -318,12 +318,7 @@ def augment_sample(parameter: Dict[str, Any], sample_id: int, statistics: Statis
     sample_stats.nodes_expanded = statistics.stats[sample_id].nodes_expanded
     sample_stats.nodes_generated = statistics.stats[sample_id].nodes_generated
 
-    filename = (
-        parameter["results_base_path"]
-        + "augmented_results_"
-        + parameter["map_type"]
-        + ".pkl"
-    )
+    filename = parameter["results_base_path"] + parameter["map_type"] + ".pkl"
 
     if not os.path.isfile(filename):
         augmented_statistics = AugmentedStatistics(
@@ -532,9 +527,7 @@ def execute_sample(parameter: Dict[str, Any], sample_id: int) -> SampleStats:
 
         sample_stats.single_agent_collision_avoidance_stats.append(vulcan_agent_stats)
 
-    filename = (
-        parameter["results_base_path"] + "results_" + parameter["map_type"] + ".pkl"
-    )
+    filename = parameter["results_base_path"] + parameter["map_type"] + ".pkl"
     if not os.path.isfile(filename):
         statistics = Statistics(
             rows=parameter["rows"],
@@ -572,9 +565,7 @@ def execute_sample(parameter: Dict[str, Any], sample_id: int) -> SampleStats:
 
 
 if __name__ == "__main__":
-    results_base_path = (
-        os.path.dirname(os.path.abspath(__file__)) + "/../data/all_observed_set/"
-    )
+    results_base_path = os.path.dirname(os.path.abspath(__file__)) + "/../data/results/"
     parser = ArgumentParser()
     parser.add_argument(
         "--map_type",
@@ -647,9 +638,7 @@ if __name__ == "__main__":
     ) as f:
         statistics = pickle.load(f)
 
-    augmented_filename = (
-        results_base_path + "augmented_results_" + args.map_type + ".pkl"
-    )
+    augmented_filename = results_base_path + args.map_type + ".pkl"
     if os.path.isfile(augmented_filename):
         with open(
             augmented_filename,

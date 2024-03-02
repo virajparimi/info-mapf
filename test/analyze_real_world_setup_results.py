@@ -275,11 +275,9 @@ def validate_paths(
 
 if __name__ == "__main__":
     dataset_base_path = os.path.dirname(os.path.abspath(__file__)) + "/../data/maps/"
-    results_base_path = (
-        os.path.dirname(os.path.abspath(__file__)) + "/../data/all_observed_set/"
-    )
+    results_base_path = os.path.dirname(os.path.abspath(__file__)) + "/../data/results/"
     store_base_path = (
-        os.path.dirname(os.path.abspath(__file__)) + "/../data/map_based_results/"
+        os.path.dirname(os.path.abspath(__file__)) + "/../data/results_npz/"
     )
     figures_base_path = (
         os.path.dirname(os.path.abspath(__file__)) + "/../figures/testing/"

@@ -277,12 +277,7 @@ def augment_sample(
     sample_stats.nodes_expanded = statistics.stats[sample_id].nodes_expanded
     sample_stats.nodes_generated = statistics.stats[sample_id].nodes_generated
 
-    filename = (
-        parameter["results_base_path"]
-        + "augmented_results_"
-        + parameter["dataset_name"]
-        + ".pkl"
-    )
+    filename = parameter["results_base_path"] + parameter["dataset_name"] + ".pkl"
 
     if not os.path.isfile(filename):
         augmented_statistics = AugmentedRealWorldStatistics(
@@ -473,9 +468,7 @@ def execute_sample(parameter: Dict[str, Any], sample_id: int) -> SampleStats:
 
         sample_stats.single_agent_collision_avoidance_stats.append(vulcan_agent_stats)
 
-    filename = (
-        parameter["results_base_path"] + "results_" + parameter["dataset_name"] + ".pkl"
-    )
+    filename = parameter["results_base_path"] + parameter["dataset_name"] + ".pkl"
     if not os.path.isfile(filename):
         statistics = RealWorldStatistics(
             rows=rows,
@@ -518,9 +511,7 @@ def execute_sample(parameter: Dict[str, Any], sample_id: int) -> SampleStats:
 
 if __name__ == "__main__":
     dataset_base_path = os.path.dirname(os.path.abspath(__file__)) + "/../data/maps/"
-    results_base_path = (
-        os.path.dirname(os.path.abspath(__file__)) + "/../data/all_observed_set/"
-    )
+    results_base_path = os.path.dirname(os.path.abspath(__file__)) + "/../data/results/"
     parser = ArgumentParser()
     parser.add_argument(
         "--dataset_name",
@@ -613,9 +604,7 @@ if __name__ == "__main__":
     ) as f:
         statistics = pickle.load(f)
 
-    augmented_filename = (
-        results_base_path + "augmented_results_" + args.dataset_name + ".pkl"
-    )
+    augmented_filename = results_base_path + args.dataset_name + ".pkl"
     if os.path.isfile(augmented_filename):
         with open(
             augmented_filename,
