@@ -50,7 +50,7 @@
             },
             "args": [
                 "--map_type",
-                "maze-32",
+                "dense",
                 "--logging_level",
                 "debug",
             ],
