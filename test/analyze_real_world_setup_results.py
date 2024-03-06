@@ -19,10 +19,9 @@ sys.path.append(os.path.join(os.path.dirname(os.path.dirname(__file__)), "src"))
 from agent import Agent  # NOQA
 from rh_ma_vulcan import MultiAgentVulcan  # NOQA
 from map import Grid, RewardMap, Parameters, ActionType  # NOQA
-from test_mapf_suite import SampleStats, AugmentedSampleStats, VulcanStats  # NOQA
+from test_mapf_suite import SampleStats, VulcanStats  # NOQA
 from test_real_world_setup import (  # NOQA
     RealWorldStatistics,
-    AugmentedRealWorldStatistics,
 )  # NOQA
 from analyze_mapf_suite_results import (  # NOQA
     linearize_coordinate,
@@ -38,7 +37,7 @@ from utils import (  # NOQA
 
 def analyze_results(
     sample_to_visualize: int,
-    statistics: AugmentedRealWorldStatistics,
+    statistics: RealWorldStatistics,
     agent_locations: List[Tuple[int, int]],
     reward_map: RewardMap,
     agent_colors: List[str],

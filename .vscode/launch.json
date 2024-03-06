@@ -67,8 +67,7 @@
             },
             "args": [
                 "--results_pkl",
-                // "results_dense.pkl",
-                "augmented_results_maze-32.pkl"
+                "original.pkl",
             ],
             "console": "integratedTerminal",
             "justMyCode": true
@@ -82,6 +81,10 @@
                 "PYTHONPATH": "${workspaceFolder}"
             },
             "args": [
+                "--dataset_name",
+                "galveston-bay.xyz",
+                "--cell_size_degrees",
+                "0.001",
                 "--logging_level",
                 "debug",
             ],
@@ -98,7 +101,7 @@
             },
             "args": [
                 "--results_pkl",
-                "augmented_results_boston-harbor.xyz.pkl",
+                "boston-harbor.xyz.pkl",
             ],
             "console": "integratedTerminal",
             "justMyCode": true

@@ -22,17 +22,6 @@ class SampleStats:
     nodes_generated: int
     gp_locations: List[Tuple[int, int]]
     multi_agent_stats: List[VulcanStats]
-    single_agent_stats: List[VulcanStats]
-    single_agent_collision_avoidance_stats: List[VulcanStats]
-    agent_locations: List[Tuple[int, int]]
-
-
-@dataclass
-class AugmentedSampleStats:
-    nodes_expanded: int
-    nodes_generated: int
-    gp_locations: List[Tuple[int, int]]
-    multi_agent_stats: List[VulcanStats]
     multi_agent_mcts_stats: List[VulcanStats]
     single_agent_stats: List[VulcanStats]
     single_agent_collision_avoidance_stats: List[VulcanStats]
@@ -48,17 +37,6 @@ class Statistics:
     mission_duration: int
     communication_range: int
     stats: List[SampleStats]
-
-
-@dataclass
-class AugmentedStatistics:
-    rows: int
-    cols: int
-    max_gps: int
-    num_agents: int
-    mission_duration: int
-    communication_range: int
-    stats: List[AugmentedSampleStats]
 
 
 NUM_SAMPLES = 100
@@ -249,113 +227,6 @@ def setup_vulcan_agents(
     return (vulcan_agents, vulcan_grid)
 
 
-def augment_sample(parameter: Dict[str, Any], sample_id: int, statistics: Statistics):
-
-    logging.info("Augmenting sample: %d", sample_id + 1)
-
-    agent_locations = statistics.stats[sample_id].agent_locations
-    gp_locations = statistics.stats[sample_id].gp_locations
-
-    # Generate the map
-    grid, reward_map = generate_map(
-        parameter["rows"],
-        parameter["cols"],
-        grid=parameter["maze"],
-        agent_locations=agent_locations,
-        gp_means=np.ones(len(gp_locations)).tolist(),
-        gp_locations=gp_locations,
-        parameters=parameter["params"],
-    )
-
-    # Object to store the statistics of this iteration
-    sample_stats = AugmentedSampleStats(
-        nodes_expanded=0,
-        nodes_generated=0,
-        multi_agent_stats=[],
-        multi_agent_mcts_stats=[],
-        single_agent_stats=[],
-        single_agent_collision_avoidance_stats=[],
-        gp_locations=gp_locations,
-        agent_locations=agent_locations,
-    )
-
-    vulcan_agents, vulcan_grid = setup_vulcan_agents(
-        agent_locations, grid, reward_map, parameter["mission_duration"]
-    )
-
-    logging.info("Running multi-agent vulcan with MCTS")
-    rh_ma_vulcan = MultiAgentVulcan(
-        grid=vulcan_grid,
-        reward_map=reward_map,
-        agents=vulcan_agents,
-        communication_range=parameter["communication_range"],
-        use_mcts=True,
-    )
-    rh_ma_vulcan.planner()
-
-    logging.info("Number of MCTS nodes generated: %d", rh_ma_vulcan.num_mcts_nodes)
-
-    # Extract the paths of the agents after running multi-agent vulcan
-    for idx, agent in enumerate(vulcan_agents):
-        vulcan_agent_stats = VulcanStats(
-            path=[],
-            phenomenons_discovered=set(),
-        )
-        for v_location in agent.visited_locations:
-            v_coord = vulcan_grid.get_coordinate(v_location)
-            v_coord_compare = (v_coord[0], v_coord[1])
-            if v_coord_compare in gp_locations:
-                vulcan_agent_stats.phenomenons_discovered.add(v_coord_compare)
-            vulcan_agent_stats.path.append(v_coord)
-
-        sample_stats.multi_agent_mcts_stats.append(vulcan_agent_stats)
-
-    sample_stats.multi_agent_stats = statistics.stats[sample_id].multi_agent_stats
-    sample_stats.single_agent_stats = statistics.stats[sample_id].single_agent_stats
-    sample_stats.single_agent_collision_avoidance_stats = statistics.stats[
-        sample_id
-    ].single_agent_collision_avoidance_stats
-    sample_stats.nodes_expanded = statistics.stats[sample_id].nodes_expanded
-    sample_stats.nodes_generated = statistics.stats[sample_id].nodes_generated
-
-    filename = parameter["results_base_path"] + parameter["map_type"] + ".pkl"
-
-    if not os.path.isfile(filename):
-        augmented_statistics = AugmentedStatistics(
-            rows=parameter["rows"],
-            cols=parameter["cols"],
-            max_gps=parameter["max_gps"],
-            num_agents=parameter["num_agents"],
-            mission_duration=parameter["mission_duration"],
-            communication_range=parameter["communication_range"],
-            stats=[sample_stats],
-        )
-        with open(
-            filename,
-            "wb",
-        ) as f:
-            pickle.dump(augmented_statistics, f)
-        logging.info(
-            "Results saved. Size of results: %d", len(augmented_statistics.stats)
-        )
-    else:
-        with open(
-            filename,
-            "rb",
-        ) as f:
-            augmented_statistics = pickle.load(f)
-            augmented_statistics.stats.append(sample_stats)
-        with open(
-            filename,
-            "wb",
-        ) as f:
-            pickle.dump(augmented_statistics, f)
-        logging.info(
-            "Results loaded and saved. Size of results: %d",
-            len(augmented_statistics.stats),
-        )
-
-
 def execute_sample(parameter: Dict[str, Any], sample_id: int) -> SampleStats:
 
     logging.info("Running sample: %d", sample_id + 1)
@@ -397,6 +268,7 @@ def execute_sample(parameter: Dict[str, Any], sample_id: int) -> SampleStats:
         nodes_expanded=0,
         nodes_generated=0,
         multi_agent_stats=[],
+        multi_agent_mcts_stats=[],
         single_agent_stats=[],
         single_agent_collision_avoidance_stats=[],
         gp_locations=gp_locations,
@@ -441,17 +313,16 @@ def execute_sample(parameter: Dict[str, Any], sample_id: int) -> SampleStats:
     )
 
     logging.info("Running multi-agent vulcan")
-    rh_ma_vulcan = MultiAgentVulcan(
+    rh_ma_mcts_vulcan = MultiAgentVulcan(
         grid=vulcan_grid,
         reward_map=reward_map,
         agents=vulcan_agents,
         communication_range=parameter["communication_range"],
         use_mcts=True,
     )
-    rh_ma_vulcan.planner()
+    rh_ma_mcts_vulcan.planner()
 
-    sample_stats.nodes_expanded = rh_ma_vulcan.nodes_expanded
-    sample_stats.nodes_generated = rh_ma_vulcan.nodes_generated
+    logging.info("Number of MCTS nodes generated: %d", rh_ma_mcts_vulcan.num_mcts_nodes)
 
     # Extract the paths of the agents after running multi-agent vulcan
     for idx, agent in enumerate(vulcan_agents):
@@ -466,7 +337,7 @@ def execute_sample(parameter: Dict[str, Any], sample_id: int) -> SampleStats:
                 vulcan_agent_stats.phenomenons_discovered.add(v_coord_compare)
             vulcan_agent_stats.path.append(v_coord)
 
-        sample_stats.multi_agent_stats.append(vulcan_agent_stats)
+        sample_stats.multi_agent_mcts_stats.append(vulcan_agent_stats)
 
     # At this point multi-agent vulcan has been run. Now need to run single agent vulcan
 
@@ -621,33 +492,15 @@ if __name__ == "__main__":
 
     start = 0
     filename = results_base_path + "results_" + args.map_type + ".pkl"
-    # if os.path.isfile(filename):
-    #     with open(
-    #         filename,
-    #         "rb",
-    #     ) as f:
-    #         statistics = pickle.load(f)
-    #         start = len(statistics.stats)
-
-    # for i in range(start, NUM_SAMPLES):
-    #     execute_sample(arguments, i)
-
-    with open(
-        filename,
-        "rb",
-    ) as f:
-        statistics = pickle.load(f)
-
-    augmented_filename = results_base_path + args.map_type + ".pkl"
-    if os.path.isfile(augmented_filename):
+    if os.path.isfile(filename):
         with open(
-            augmented_filename,
+            filename,
             "rb",
         ) as f:
-            augmented_statistics = pickle.load(f)
-            start = len(augmented_statistics.stats)
+            statistics = pickle.load(f)
+            start = len(statistics.stats)
 
     for i in range(start, NUM_SAMPLES):
-        augment_sample(arguments, i, statistics)
+        execute_sample(arguments, i)
 
     print("All results saved")

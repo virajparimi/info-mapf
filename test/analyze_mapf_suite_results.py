@@ -12,9 +12,7 @@ from matplotlib.animation import FuncAnimation
 from typing import List, Tuple, Any, Union, Set
 from test_mapf_suite import (  # NOQA
     Statistics,
-    AugmentedStatistics,
     SampleStats,
-    AugmentedSampleStats,
     VulcanStats,
     load_mapf_map,
 )  # NOQA
@@ -110,7 +108,7 @@ def within_range_agents(
 
 def analyse_results(
     sample_to_visualize: int,
-    statistics: AugmentedStatistics,
+    statistics: Statistics,
     agent_locations: List[Tuple[int, int]],
     reward_map: RewardMap,
     agent_colors: List[str],
