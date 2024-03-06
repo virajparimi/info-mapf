@@ -459,7 +459,14 @@ if __name__ == "__main__":
         header,
         bounds,
     ) = setup_experiment_parameters(args.dataset_name)
-    dataframe = load_data_to_pandas(dataset_base_path + args.dataset_name, header)
+
+    if "boston" in args.dataset_name:
+        delimiter = "\t"
+    else:
+        delimiter = ","
+    dataframe = load_data_to_pandas(
+        dataset_base_path + args.dataset_name, header, delimiter
+    )
 
     for head in header:
         if head != "SURVEY":

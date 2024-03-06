@@ -102,14 +102,18 @@ def generate_map(
     return Grid(obstacle_map, grid), reward_map
 
 
-def load_data_to_pandas(input_file: str, header: List[str]) -> DataFrame:
+def load_data_to_pandas(
+    input_file: str, header: List[str], delimiter: str
+) -> DataFrame:
     """
     Load real-world data from a file to a pandas DataFrame
     :param input_file: File to load data from
     :param header: Header for the CSV file
     """
     with open(input_file, "r") as infile:
-        csv_reader = reader(infile, delimiter="\t")  # Assuming data is tab-separated
+        csv_reader = reader(
+            infile, delimiter=delimiter
+        )  # Assuming data is tab-separated
         data = list(csv_reader)
         data = data[1:]  # Remove header
         dataframe = DataFrame(data, columns=header)
