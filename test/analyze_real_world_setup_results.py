@@ -317,12 +317,16 @@ if __name__ == "__main__":
     obstacle_threshold = statistics.obstacle_threshold
     if "boston-harbor" in dataset_name:
         header = ["SURVEY", "LON", "LAT", "DEPTH"]
+        delimiter = "\t"
     elif "galveston-bay" in dataset_name:
         header = ["SURVEY", "LAT", "LON", "DEPTH", "QUALITY_CODE", "ACTIVE"]
+        delimiter = ","
     else:
         raise ValueError("Unknown dataset name")
 
-    dataframe = load_data_to_pandas(dataset_base_path + dataset_name, header)
+    dataframe = load_data_to_pandas(
+        dataset_base_path + dataset_name, header, delimiter=delimiter
+    )
     for head in header:
         if head != "SURVEY":
             dataframe[head] = dataframe[head].astype(float)

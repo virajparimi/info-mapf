@@ -79,7 +79,7 @@ def setup_experiment_parameters(
         ) = (
             30,
             4,
-            150,
+            100,
             5,
             2,
             ["SURVEY", "LAT", "LON", "DEPTH", "QUALITY_CODE", "ACTIVE"],
@@ -487,7 +487,7 @@ if __name__ == "__main__":
     }
 
     start = 0
-    filename = results_base_path + "results_" + args.dataset_name + ".pkl"
+    filename = results_base_path + args.dataset_name + ".pkl"
     if os.path.isfile(filename):
         with open(
             filename,
