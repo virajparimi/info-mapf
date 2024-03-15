@@ -1,0 +1,11 @@
+name: info-mapf
+channels:
+  - defaults
+dependencies:
+  - numpy
+  - matplotlib
+  - scipy
+  - cartopy
+  - pandas
+  - numba
+prefix: /Users/viraj/miniconda3/envs/info-mapf

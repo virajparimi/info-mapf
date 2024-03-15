@@ -1,0 +1,14 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "type": "austin",
+            "file": "test/test_vulcan.py",
+            "label": "Profile Vulcan",
+            "args": [
+                "--type",
+                "single-small",
+            ],
+        }
+    ]
+}
