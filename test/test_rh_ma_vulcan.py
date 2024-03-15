@@ -76,7 +76,15 @@ if __name__ == "__main__":
         "--type",
         type=str,
         default="single-small",
-        choices=["single-small", "single-large", "multi-small", "multi-large"],
+        choices=[
+            "single-small",
+            "single-large",
+            "multi-small",
+            "multi-large",
+            "turtlebot_setup_empty_2",
+            "turtlebot_setup_empty_3",
+            "turtlebot_setup_maze_2",
+        ],
         help="Type(phenomenon-map_size) of Receding-Horizon Multi-Agent Vulcan testing to perform",
     )
 
@@ -159,12 +167,62 @@ if __name__ == "__main__":
             gp_locations=[(1, 1), (8, 2), (5, 5), (2, 8), (10, 10)],
             parameters=params,
         )
+    elif args.type == "turtlebot_setup_empty_2":
+        agent_locations = [(0, 0), (0, 2)]
+        gp_locations = [(1, 1), (7, 7), (4, 4), (1, 7), (7, 1)]
+        grid, reward_map = generate_map(
+            8,
+            8,
+            agent_locations=agent_locations,
+            gp_means=[1, 1, 1, 1, 1],
+            gp_locations=gp_locations,
+            parameters=params,
+        )
+    elif args.type == "turtlebot_setup_empty_3":
+        agent_locations = [(0, 0), (0, 2), (2, 0)]
+        gp_locations = [(1, 1), (7, 7), (4, 4), (1, 7), (7, 1)]
+        grid, reward_map = generate_map(
+            8,
+            8,
+            agent_locations=agent_locations,
+            gp_means=[1, 1, 1, 1, 1],
+            gp_locations=gp_locations,
+            parameters=params,
+        )
+    elif args.type == "turtlebot_setup_maze_2":
+        agent_locations = [(0, 0), (0, 3)]
+        gp_locations = [(1, 1), (7, 7), (4, 4), (1, 7), (7, 1)]
+        maze = np.ones((8, 8))
+        maze[0, 2] = 0
+        maze[1, 2] = 0
+        maze[2, 2] = 0
+        maze[2, 3] = 0
+        maze[2, 4] = 0
+        maze[2, 5] = 0
+        maze[5, 5] = 0
+        maze[5, 4] = 0
+        maze[5, 3] = 0
+        maze[5, 2] = 0
+        maze[6, 5] = 0
+        maze[7, 5] = 0
+        grid, reward_map = generate_map(
+            8,
+            8,
+            grid=maze,
+            agent_locations=agent_locations,
+            gp_means=[1, 1, 1, 1, 1],
+            gp_locations=gp_locations,
+            parameters=params,
+        )
     else:
         raise ValueError("Invalid type")
 
     if "small" in args.type:
         mission_duration = 10
         communication_range = 3
+    elif "turtlebot" in args.type:
+        mission_duration = 25
+        communication_range = 5
     else:
         mission_duration = 35
         communication_range = 5
@@ -183,63 +241,63 @@ if __name__ == "__main__":
         zz += gaussian
     zz /= np.max(zz)
 
-    # vulcan_agents = []
-    # vulcan_grid = deepcopy(grid)
-    # for agent in range(len(agent_locations)):
-    #     agent_location_linearized = vulcan_grid.linearize_coordinate(
-    #         agent_locations[agent][0], agent_locations[agent][1]
-    #     )
-    #     vulcan_agent = Agent(
-    #         id=agent,
-    #         start_location=agent_location_linearized,
-    #         grid=vulcan_grid,
-    #         reward_map=reward_map,
-    #         mission_duration=mission_duration,
-    #     )
-    #     vulcan_agents.append(vulcan_agent)
+    vulcan_agents = []
+    vulcan_grid = deepcopy(grid)
+    for agent in range(len(agent_locations)):
+        agent_location_linearized = vulcan_grid.linearize_coordinate(
+            agent_locations[agent][0], agent_locations[agent][1]
+        )
+        vulcan_agent = Agent(
+            id=agent,
+            start_location=agent_location_linearized,
+            grid=vulcan_grid,
+            reward_map=reward_map,
+            mission_duration=mission_duration,
+        )
+        vulcan_agents.append(vulcan_agent)
 
-    # rh_ma_vulcan = MultiAgentVulcan(
-    #     grid=vulcan_grid,
-    #     reward_map=reward_map,
-    #     agents=vulcan_agents,
-    #     communication_range=communication_range,
-    # )
+    rh_ma_vulcan = MultiAgentVulcan(
+        grid=vulcan_grid,
+        reward_map=reward_map,
+        agents=vulcan_agents,
+        communication_range=communication_range,
+    )
 
-    # with Profile() as prof:
-    #     print(f"{rh_ma_vulcan.planner()}")
-    #     (Stats(prof).strip_dirs().sort_stats(SortKey.CUMULATIVE).print_stats())
+    with Profile() as prof:
+        print(f"{rh_ma_vulcan.planner()}")
+        (Stats(prof).strip_dirs().sort_stats(SortKey.CUMULATIVE).print_stats())
 
-    # print("Vulcan Agents Path")
-    # vulcan_agents_paths = []
-    # for idx, agent in enumerate(vulcan_agents):
-    #     print("Path for agent ", agent.id)
-    #     vulcan_path = []
-    #     for v_location in agent.visited_locations:
-    #         vulcan_path.append(vulcan_grid.get_coordinate(v_location))
-    #     print(vulcan_path)
-    #     plt.plot(
-    #         [x[1] for x in vulcan_path],
-    #         [x[0] for x in vulcan_path],
-    #         agent_colors[idx] + "--",
-    #         alpha=0.7,
-    #     )
-    #     vulcan_agents_paths.append(vulcan_path)
+    print("Vulcan Agents Path")
+    vulcan_agents_paths = []
+    for idx, agent in enumerate(vulcan_agents):
+        print("Path for agent ", agent.id)
+        vulcan_path = []
+        for v_location in agent.visited_locations:
+            vulcan_path.append(vulcan_grid.get_coordinate(v_location))
+        print(vulcan_path)
+        plt.plot(
+            [x[1] for x in vulcan_path],
+            [x[0] for x in vulcan_path],
+            agent_colors[idx] + "--",
+            alpha=0.7,
+        )
+        vulcan_agents_paths.append(vulcan_path)
 
-    # plt.imshow(
-    #     zz,
-    #     extent=(-1, reward_map.num_of_rows + 1, reward_map.num_of_cols + 1, -1),
-    #     cmap="hot",
-    # )
-    # if args.save_figures:
-    #     plt.savefig(figures_base_path + "rh-ma-vulcan-" + args.type + ".png")
+    plt.imshow(
+        zz,
+        extent=(-1, reward_map.num_of_rows + 1, reward_map.num_of_cols + 1, -1),
+        cmap="hot",
+    )
+    if args.save_figures:
+        plt.savefig(figures_base_path + "rh-ma-vulcan-" + args.type + ".png")
 
-    # visualize_path(
-    #     vulcan_agents_paths,
-    #     reward_map,
-    #     figures_base_path + "rh-ma-vulcan-" + args.type + ".gif",
-    #     [zz],
-    #     save_fig=args.save_figures,
-    # )
+    visualize_path(
+        vulcan_agents_paths,
+        reward_map,
+        figures_base_path + "rh-ma-vulcan-" + args.type + ".gif",
+        [zz],
+        save_fig=args.save_figures,
+    )
 
     # MCTS test
 

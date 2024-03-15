@@ -31,7 +31,7 @@
             },
             "args": [
                 "--type",
-                "single-small",
+                "turtlebot_setup_maze_2",
                 "--measurement_noise",
                 "0.2",
                 "--logging_level",

@@ -1,13 +1,12 @@
 import os
 import sys
+import math
 import rospy
 import logging
 import numpy as np
-from typing import Dict
-import matplotlib.pyplot as plt
+from typing import Dict, List
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Twist
-from scipy.stats import multivariate_normal
 from tf.transformations import euler_from_quaternion
 
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(__file__)), "../src"))
@@ -30,18 +29,21 @@ class PlanDispatchNode:
         step_size: float = 0.3,  # meters
         turn_time: float = 10.0,  # seconds
         planner: str = "rh_ma_vulcan",
+        problem_type="empty_2",
     ):
 
         self.speed = speed
         self.turn_time = turn_time
         self.step_size = step_size
         self.base_command_topic = base_command_topic
+
         self.agent_namespaces = agent_namespaces
-        self.agent_orientations = {
-            agent_id: 0.0 for agent_id in agent_namespaces.keys()
-        }
+        self.agent_orientations = {agent_id: 0 for agent_id in agent_namespaces.keys()}
         self.agent_eulers = {
             agent_id: (0.0, 0.0, 0.0) for agent_id in agent_namespaces.keys()
+        }
+        self.current_positions = {
+            agent_id: [0, 0] for agent_id in agent_namespaces.keys()
         }
 
         self.dispatchers, self.subscribers = {}, {}
@@ -80,32 +82,32 @@ class PlanDispatchNode:
         ) = (
             8,
             8,
-            4,
+            5,
             len(agent_namespaces),
-            25,
+            20,
             5,
         )
 
-        self.agent_locations = [(0, 0), (7, 7)]
+        if problem_type == "empty_2":
+            self.agent_locations = [(0, 0), (0, 2)]
+        elif problem_type == "empty_3":
+            self.agent_locations = [(0, 0), (0, 2), (2, 0)]
+        elif problem_type == "maze_2":
+            self.agent_locations = [(0, 0), (0, 3)]
+        else:
+            raise ValueError("Invalid problem type")
 
-        if self.num_agents > len(self.agent_locations) and self.num_agents == 3:
-            self.agent_locations += [(0, 7)]
-            self.max_gps = 5
-        elif self.num_agents > len(self.agent_locations) and self.num_agents == 4:
-            self.agent_locations += [(7, 0), (7, 0)]
-            self.max_gps = 6
+        if len(self.agent_locations) != self.num_agents:
+            raise ValueError(
+                "Number of agents and number of ROS namespaces do not match"
+            )
 
-        gp_locations = [(1, 1), (6, 2), (5, 5), (2, 6)]
-        if self.max_gps == 5:
-            gp_locations += [(1, 6)]
-        elif self.max_gps == 6:
-            gp_locations += [(1, 6), (6, 1)]
-
+        gp_locations = [(1, 1), (7, 7), (4, 4), (1, 7), (7, 1)]
         self.grid, self.reward_map = generate_map(
             self.rows,
             self.cols,
             agent_locations=self.agent_locations,
-            gp_means=np.ones(self.max_gps).tolist(),
+            gp_means=np.ones(len(gp_locations)).tolist(),
             gp_locations=gp_locations,
             parameters=self.params,
         )
@@ -145,25 +147,30 @@ class PlanDispatchNode:
                 reward_map=self.reward_map,
                 agents=self.vulcan_agents,
             )
+        else:
+            raise ValueError("Invalid planner")
 
         self.agent_colors = ["r", "b", "g", "y", "m", "c", "k"]
 
-        x = np.linspace(0, self.reward_map.num_of_cols, 1000)
-        y = np.linspace(0, self.reward_map.num_of_rows, 1000)
-        xx, yy = np.meshgrid(x, y)
-        meshgrid = np.dstack((xx, yy))
-        self.zz = np.zeros_like(xx)
-        for i in range(len(self.reward_map.locations)):
-            linear_location = self.reward_map.locations[i]
-            location_coord = self.reward_map.get_coordinate(linear_location)
-            location_coord = np.array([location_coord[1], location_coord[0]])
-            gaussian = self.reward_map.means[i] * multivariate_normal.pdf(
-                meshgrid, mean=location_coord, cov=1
-            )
-            self.zz += gaussian
-        self.zz /= np.max(self.zz)
+        self.direction_map = {
+            ActionType.Up.value: 0,
+            ActionType.Left.value: 1,
+            ActionType.Down.value: 2,
+            ActionType.Right.value: 3,
+        }
+
+        self.angle_map = {
+            0: 0.0,
+            1: np.pi / 2.0,
+            2: -np.pi,
+            3: -np.pi / 2.0,
+        }
 
     def get_rotation(self, msg):
+        """
+        Callback for the Odometry messages that updates the agent's orientation and position
+        :param msg: Odometry message
+        """
         orientation_q = msg.pose.pose.orientation
         orientation_list = [
             orientation_q.x,
@@ -172,128 +179,106 @@ class PlanDispatchNode:
             orientation_q.w,
         ]
         (roll, pitch, yaw) = euler_from_quaternion(orientation_list)
-        if roll < 0:
-            roll += 2 * np.pi
-        if pitch < 0:
-            pitch += 2 * np.pi
-        if yaw < 0:
-            yaw += 2 * np.pi
 
-        if np.allclose(roll, 2 * np.pi, rtol=0.001):
-            roll = 0
-        if np.allclose(pitch, 2 * np.pi, rtol=0.001):
-            pitch = 0
+        # If the yaw is close to 2 * pi or 0, set it to 0
         if np.allclose(yaw, 2 * np.pi, rtol=0.001):
             yaw = 0
+        if np.allclose(yaw, 0, atol=0.001):
+            yaw = 0
+
         for agent_id, namespace in self.agent_namespaces.items():
             if namespace in msg.header.frame_id:
                 self.agent_eulers[agent_id] = (roll, pitch, yaw)
-                self.agent_orientations[agent_id] = yaw
+                self.current_positions[agent_id] = [
+                    msg.pose.pose.position.x,
+                    msg.pose.pose.position.y,
+                ]
                 break
 
-    def run_planner(self):
+    def run_planner(self) -> List[Action]:
+        """
+        Executes the planner for the mission duration
+        """
 
+        list_of_agent_actions = []
         while self.planner.timer < self.mission_duration and not rospy.is_shutdown():
+
+            print("Current time: ", self.planner.timer)
+
             agent_actions = self.planner.single_step_planner(ros=True)
+            list_of_agent_actions.append(agent_actions)
             assert agent_actions is not None
 
-            # For debugging only!
-            # agent_action_a = input("Enter action for agent 0: ")
-            # if agent_action_a == "Up":
-            #     agent_action_a = Action(action_type=ActionType.Up, location=0)
-            # elif agent_action_a == "Down":
-            #     agent_action_a = Action(action_type=ActionType.Down, location=0)
-            # elif agent_action_a == "Left":
-            #     agent_action_a = Action(action_type=ActionType.Left, location=0)
-            # elif agent_action_a == "Right":
-            #     agent_action_a = Action(action_type=ActionType.Right, location=0)
-            # else:
-            #     agent_action_a = Action(action_type=ActionType.Wait, location=0)
-            # agent_action_b = input("Enter action for agent 1: ")
-            # if agent_action_b == "Up":
-            #     agent_action_b = Action(action_type=ActionType.Up, location=0)
-            # elif agent_action_b == "Down":
-            #     agent_action_b = Action(action_type=ActionType.Down, location=0)
-            # elif agent_action_b == "Left":
-            #     agent_action_b = Action(action_type=ActionType.Left, location=0)
-            # elif agent_action_b == "Right":
-            #     agent_action_b = Action(action_type=ActionType.Right, location=0)
-            # else:
-            #     agent_action_b = Action(action_type=ActionType.Wait, location=0)
-
-            # agent_actions = {0: agent_action_a, 1: agent_action_b}
-            print(agent_actions)
-
-            con = input("Continue? (Y/n)")
-            if con == "n":
-                break
+            print("Going to execute the actions: ", agent_actions)
 
             self.execute_turns(agent_actions)
-            print("Turns executed")
-            print("Executing moves")
+
+            reorient = input("Reorient? (Y/n)")
+            if reorient == "y" or reorient == "Y":
+                self.execute_turns(agent_actions)
+
             self.execute_moves(agent_actions)
 
-        vulcan_agents_paths = []
-        for idx, agent in enumerate(self.vulcan_agents):
-            print("Path for agent ", agent.id)
-            vulcan_path = []
-            for v_location in agent.visited_locations:
-                vulcan_path.append(self.grid.get_coordinate(v_location))
-            print(vulcan_path)
-            plt.plot(
-                [x[1] for x in vulcan_path],
-                [x[0] for x in vulcan_path],
-                self.agent_colors[idx] + "--",
-                alpha=0.7,
-            )
-            vulcan_agents_paths.append(vulcan_path)
+        return list_of_agent_actions
 
-        plt.imshow(
-            self.zz,
-            extent=(
-                0,
-                self.reward_map.num_of_cols,
-                self.reward_map.num_of_rows,
-                0,
-            ),
-            cmap="hot",
-        )
-        plt.show()
+    def angle_difference(self, target_angle: float, current_angle: float) -> float:
+        """
+        Returns the difference between two angles and takes care of the wrap-around in radians
+        :param target_angle: Target angle in radians
+        :param current_angle: Current angle in radians
+        """
+        diff = (target_angle - current_angle + math.pi) % (2 * math.pi) - math.pi
+        return diff if diff < math.pi else diff - (2 * math.pi)
 
     def execute_turns(self, agent_actions: Dict[int, Action]):
+        """
+        Executes the turns for the agents
+        :param agent_actions: Dictionary of agent ids and their actions
+        """
 
+        intended_directions = {agent_id: 0 for agent_id in agent_actions.keys()}
         radians_to_move = {agent_id: 0.0 for agent_id in agent_actions.keys()}
+
         for agent_id, action in agent_actions.items():
-            if action.action_type.value == "Up":
-                radians_to_move[agent_id] = 0.0
-            elif action.action_type.value == "Down":
-                radians_to_move[agent_id] = np.pi
-            elif action.action_type.value == "Left":
-                radians_to_move[agent_id] = np.pi / 2.0
-            elif action.action_type.value == "Right":
-                radians_to_move[agent_id] = 3 * np.pi / 2.0
-            else:
-                radians_to_move[agent_id] = self.agent_orientations[agent_id]
+            rotation_needed = int(
+                (
+                    self.direction_map[action.action_type.value]
+                    - self.agent_orientations[agent_id]
+                )
+                % 4
+            )
+            intended_directions[agent_id] = self.direction_map[action.action_type.value]
+            radians_to_move[agent_id] = self.angle_map[rotation_needed]
 
         turn_rate = rospy.Rate(25)
 
-        first = True
         all_done = False
         done = [False for _ in range(len(radians_to_move))]
+
+        target_orientations = {
+            agent_id: self.angle_map[self.agent_orientations[agent_id]]
+            + radians_to_move[agent_id]
+            for agent_id in radians_to_move.keys()
+        }
+        initial_diff = {
+            agent_id: self.angle_difference(
+                target_orientations[agent_id], self.agent_eulers[agent_id][2]
+            )
+            for agent_id in radians_to_move.keys()
+        }
+        initial_sign = {
+            agent_id: math.copysign(1, initial_diff[agent_id])
+            for agent_id in radians_to_move.keys()
+        }
         while not all_done:
             for agent_id, radians in radians_to_move.items():
-                print(f"Agent {agent_id} is at {self.agent_eulers[agent_id][2]}")
-                print(f"Agent {agent_id} is going to {radians}")
-                if first:
-                    if np.allclose(radians, self.agent_eulers[agent_id][2], atol=0.05):
-                        done[agent_id] = True
-
-                if (
-                    not np.allclose(radians, self.agent_eulers[agent_id][2], atol=0.05)
-                    and not done[agent_id]
-                ):
+                current_diff = self.angle_difference(
+                    target_orientations[agent_id], self.agent_eulers[agent_id][2]
+                )
+                current_sign = math.copysign(1, current_diff)
+                if current_sign == initial_sign[agent_id] and not done[agent_id]:
                     turn_cmd = Twist()
-                    turn_cmd.angular.z = 0.3
+                    turn_cmd.angular.z = 0.2 if initial_sign[agent_id] > 0 else -0.2
                     self.dispatchers[agent_id].publish(turn_cmd)
                     turn_rate.sleep()
                     done[agent_id] = False
@@ -301,61 +286,59 @@ class PlanDispatchNode:
                     stop_command = Twist()
                     self.dispatchers[agent_id].publish(stop_command)
                     done[agent_id] = True
+                    self.agent_orientations[agent_id] = intended_directions[agent_id]
             for d in done:
                 if not d:
                     all_done = False
                     break
                 else:
                     all_done = True
-            first = False
-
-        # for agent_id, radians in radians_to_move.items():
-        #     # radians = radians - self.agent_orientations[agent_id]
-        #     # speed = radians / self.turn_time
-        #     # turn_cmd = Twist()
-        #     # turn_cmd.angular.z = speed
-        #     # print(f"Commanding {agent_id} to {radians} with speed {speed}")
-        #     # self.dispatchers[agent_id].publish(turn_cmd)
-
-        #     # if agent_id == 0:
-        #     #     continue
-
-        #     # radians = radians - self.agent_orientations[agent_id]
-        #     commanded_z = abs(0.1 * (radians - self.agent_eulers[agent_id][2]))
-        #     print(f"Euler: {self.agent_eulers[agent_id]}")
-        #     print(f"Going to {radians}")
-        #     while abs(self.agent_eulers[agent_id][2] - radians) > 0.05:
-        #         commanded_z = abs(0.1 * (radians - self.agent_eulers[agent_id][2]))
-        #         turn_cmd = Twist()
-        #         turn_cmd.angular.z = 0.2
-        #         print(f"Commanding {agent_id} to {radians} with speed {commanded_z}")
-        #         print(f"Current orientation: {self.agent_eulers[agent_id]}")
-        #         self.dispatchers[agent_id].publish(turn_cmd)
-        #         print(self.dispatchers[agent_id].get_num_connections())
-        #         turn_rate.sleep()
-
-        #     stop_command = Twist()
-        #     for agent_id, dispatcher in self.dispatchers.items():
-        #         dispatcher.publish(stop_command)
-        #         # self.agent_orientations[agent_id] = radians_to_move[agent_id]
-
-        # rospy.sleep(self.turn_time)
-        print("Turns executed inside ")
 
     def execute_moves(self, agent_actions: Dict[int, Action]):
+        """
+        Executes the moves for the agents
+        :param agent_actions: Dictionary of agent ids and their actions
+        """
 
+        all_done = False
+        done = [False for _ in range(len(agent_actions))]
         for agent_id, action in agent_actions.items():
             if action.action_type.value != "Wait":
-                print(f"Commanding {agent_id} to move {action.action_type.value}")
                 forward_cmd = Twist()
                 forward_cmd.linear.x = self.speed
                 self.dispatchers[agent_id].publish(forward_cmd)
 
-        rospy.sleep((self.step_size / self.speed))
+        start_positions = {
+            agent_id: self.current_positions[agent_id]
+            for agent_id in agent_actions.keys()
+        }
+        while not all_done:
+            for agent_id, action in agent_actions.items():
+                if action.action_type.value != "Wait":
+                    distance_travelled = np.sqrt(
+                        (
+                            start_positions[agent_id][0]
+                            - self.current_positions[agent_id][0]
+                        )
+                        ** 2
+                        + (
+                            start_positions[agent_id][1]
+                            - self.current_positions[agent_id][1]
+                        )
+                        ** 2
+                    )
+                    if distance_travelled >= self.step_size:
+                        stop_command = Twist()
+                        self.dispatchers[agent_id].publish(stop_command)
+                        done[agent_id] = True
+            self.rate.sleep()
 
-        stop_command = Twist()
-        for agent_id, dispatcher in self.dispatchers.items():
-            dispatcher.publish(stop_command)
+            for d in done:
+                if not d:
+                    all_done = False
+                    break
+                else:
+                    all_done = True
 
 
 if __name__ == "__main__":
@@ -363,12 +346,11 @@ if __name__ == "__main__":
     logging.basicConfig()
     logging.getLogger().setLevel(logging.DEBUG)
 
-    node = PlanDispatchNode("cmd_vel", {0: "tb3_1", 1: "tb3_5"})
-    node.run_planner()
+    node = PlanDispatchNode("cmd_vel", {0: "tb3_1", 1: "tb3_5", 2: "tb3_0"})
+    list_of_agent_actions = node.run_planner()
+    print("History of actions executed by the agents: ", list_of_agent_actions)
 
     # You can also run this with more agents and different planners
     # 1. "rh_ma_vulcan"
     # 2. "rh_mcts_ma_vulcan"
     # 3. "sa_ca_vulcan"
-
-    # When recording the videos make sure to "clap" once the agents take a step to help with video synchronization
