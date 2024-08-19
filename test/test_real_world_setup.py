@@ -78,7 +78,7 @@ def setup_experiment_parameters(
             bounds,
         ) = (
             30,
-            4,
+            10,
             100,
             5,
             2,
@@ -128,6 +128,27 @@ def generate_agent_locations(
         elif maze is None and within_communication_range:
             agent_locations.add(agent_loc)
     return list(agent_locations)
+
+
+def generate_all_agent_locations(
+        num_agents: int,
+        rows: int,
+        cols: int,
+        communication_range: int,
+        maze: Union[NDArray[np.bool_], None] = None,
+) -> List[Tuple[int, int]]:
+
+    if num_agents <= 5:
+        return generate_agent_locations(num_agents, rows, cols, communication_range, maze)
+    else:
+        groups = num_agents // 5
+        remainder = num_agents % 5
+        agent_locations = []
+        for i in range(groups):
+            agent_locations += generate_agent_locations(5, rows, cols, communication_range, maze)
+        if remainder > 0:
+            agent_locations += generate_agent_locations(remainder, rows, cols, communication_range, maze)
+        return agent_locations
 
 
 def generate_gp_locations(
@@ -200,7 +221,7 @@ def execute_sample(parameter: Dict[str, Any], sample_id: int) -> SampleStats:
     )
 
     # Spawn the agents and the phenomenons such that the phenomenons are not spawned on the agents
-    agent_locations = generate_agent_locations(
+    agent_locations = generate_all_agent_locations(
         parameter["num_agents"],
         rows,
         cols,
