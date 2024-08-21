@@ -20,6 +20,8 @@ from utils import (
 )
 
 
+MAX_GROUP_SIZE=3
+
 @dataclass
 class RealWorldStatistics:
     rows: int
@@ -138,14 +140,14 @@ def generate_all_agent_locations(
         maze: Union[NDArray[np.bool_], None] = None,
 ) -> List[Tuple[int, int]]:
 
-    if num_agents <= 5:
+    if num_agents <= MAX_GROUP_SIZE:
         return generate_agent_locations(num_agents, rows, cols, communication_range, maze)
     else:
-        groups = num_agents // 5
-        remainder = num_agents % 5
+        groups = num_agents // MAX_GROUP_SIZE
+        remainder = num_agents % MAX_GROUP_SIZE
         agent_locations = []
         for i in range(groups):
-            agent_locations += generate_agent_locations(5, rows, cols, communication_range, maze)
+            agent_locations += generate_agent_locations(MAX_GROUP_SIZE, rows, cols, communication_range, maze)
         if remainder > 0:
             agent_locations += generate_agent_locations(remainder, rows, cols, communication_range, maze)
         return agent_locations
