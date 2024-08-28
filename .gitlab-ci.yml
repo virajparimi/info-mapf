@@ -13,8 +13,8 @@ variables:
   LC_ALL: C.UTF-8
 
 before_script:
-  - gem install bundler
-  - BUNDLE_GEMFILE="website/Gemfile" bundle install
+  - gem install bundler:2.4.22
+  - BUNDLE_GEMFILE="website/Gemfile" bundle _2.4.22_ install
 
 test:
   stage: test
