@@ -14,7 +14,7 @@ variables:
 
 before_script:
   - gem install bundler
-  - bundle install
+  - BUNDLE_GEMFILE="website/Gemfile" bundle install
 
 test:
   stage: test
