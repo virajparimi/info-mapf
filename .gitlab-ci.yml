@@ -19,7 +19,7 @@ before_script:
 test:
   stage: test
   script:
-    - bundle exec jekyll build -d test
+    - BUNDLE_GEMFILE="website/Gemfile" bundle _2.4.22_ exec jekyll build -d test
   artifacts:
     paths:
       - test
