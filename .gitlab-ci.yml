@@ -30,7 +30,7 @@ test:
 pages:
   stage: deploy
   script:
-    - bundle exec jekyll build -d public
+    - BUNDLE_GEMFILE="website/Gemfile" bundle _2.4.22_ exec jekyll build -d public
   artifacts:
     paths:
       - public
