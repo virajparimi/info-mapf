@@ -181,7 +181,7 @@ def visualize_path(
             alpha=0.5,
         )
 
-    agent_colors = ["g", "b", "r", "deeppink", "y", "m", "c", "w"]
+    agent_colors = ["g", "b", "r", "deeppink", "y", "m", "c", "w", "darkblue", "darkmagenta"]
     num_of_agents = len(paths)
 
     lines = []
@@ -252,7 +252,7 @@ def validate_paths(
                 return step
 
         # Vertex collision
-        if np.array_equal(agent_i_location, agent_j_location):
+        if step != 0 and np.array_equal(agent_i_location, agent_j_location):
             logging.error(
                 f"{string} collision detected at step {step} between agents {agent_i_id} and {agent_j_id}"
             )
@@ -370,7 +370,7 @@ if __name__ == "__main__":
     total_nodes_expanded, total_nodes_generated, max_nodes_generated = 0, 0, 0
 
     mission_duration = statistics.mission_duration
-    for sample in range(1, num_samples):
+    for sample in range(0, num_samples):
 
         gp_locations = statistics.stats[sample].gp_locations
         agent_locations = statistics.stats[sample].agent_locations
@@ -843,7 +843,7 @@ if __name__ == "__main__":
         zz += gaussian
     zz /= np.max(zz)
 
-    agent_colors = ["g", "b", "r", "deeppink", "y", "m", "c", "w"]
+    agent_colors = ["g", "b", "r", "deeppink", "y", "m", "c", "w", "darkblue", "darkmagenta"]
 
     if maze is not None:
         x_obstacle = np.linspace(0, reward_map.num_of_cols, maze.shape[1])
