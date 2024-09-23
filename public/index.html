@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <!-- Meta tags for social media banners, these should be filled in appropriatly as they are your "business card" -->
+  <!-- Replace the content tag with appropriate information -->
+  <meta name="description" content="Info-MAPF, Information-Guided Mulit-Agent Path Finding">
+  <meta property="og:title" content="SOCIAL MEDIA TITLE TAG"/>
+  <meta property="og:description" content="SOCIAL MEDIA DESCRIPTION TAG TAG"/>
+  <meta property="og:url" content="info-mapf-mers.csail.mit.edu"/>
+  <!-- Path to banner image, should be in the path listed below. Optimal dimenssions are 1200X630-->
+  <meta property="og:image" content="static/image/mers_logo.png" />
+  <meta property="og:image:width" content="1200"/>
+  <meta property="og:image:height" content="630"/>
+
+
+  <meta name="keywords" content="Path Planning for Multiple Mobile Robots or Agents; Multi-Robot Systems; Autonomous Agents">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+
+  <title>Multi-Agent Vulcan: An Information-Driven Multi-Agent Path Finding Approach</title>
+  <link rel="icon" type="image/x-icon" href="static/images/favicon.ico">
+  <link href="https://fonts.googleapis.com/css?family=Google+Sans|Noto+Sans|Castoro"
+  rel="stylesheet">
+
+  <link rel="stylesheet" href="static/css/bulma.min.css">
+  <link rel="stylesheet" href="static/css/bulma-carousel.min.css">
+  <link rel="stylesheet" href="static/css/bulma-slider.min.css">
+  <link rel="stylesheet" href="static/css/fontawesome.all.min.css">
+  <link rel="stylesheet"
+  href="https://cdn.jsdelivr.net/gh/jpswalsh/academicons@1/css/academicons.min.css">
+  <link rel="stylesheet" href="static/css/index.css">
+
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+  <script src="https://documentcloud.adobe.com/view-sdk/main.js"></script>
+  <script defer src="static/js/fontawesome.all.min.js"></script>
+  <script src="static/js/bulma-carousel.min.js"></script>
+  <script src="static/js/bulma-slider.min.js"></script>
+  <script src="static/js/index.js"></script>
+</head>
+<body>
+
+
+<section class="hero">
+  <div class="hero-body">
+      <div class="container is-max-desktop">
+        <div class="columns is-centered">
+          <div class="column has-text-centered">
+          <div class="title is-1 publication-title">
+            <a href="https://mers.csail.mit.edu/" target="_blank">
+              <img src="static/images/mers_logo.png" alt="MERS" style="width: 100px; vertical-align: middle; margin-right: 10px;">
+            </a>
+            <h1>Multi-Agent Vulcan: An Information-Driven Multi-Agent Path Finding Approach</h1>
+          </div>
+          <div class="is-size-5 publication-authors">
+            <!-- Paper authors -->
+            <span class="author-block">
+              <a href="" target="_blank">Jake Olkin</a><sup>*</sup>,
+            </span>
+            <span class="author-block">
+              <a href="https://people.csail.mit.edu/vparimi/" target="_blank">Viraj Parimi</a><sup>*</sup>,
+            </span>
+            <span class="author-block">
+              <a href="https://www.csail.mit.edu/person/brian-williams" target="_blank">Brian Williams</a>
+            </span>
+          </div>
+          
+          <div class="is-size-5 publication-authors">
+            <span class="author-block">Massachusetts Institute of Technology<br>IROS 2024</span>
+            <span class="eql-cntrb"><small><br><sup>*</sup>Indicates Equal Contribution</small></span>
+          </div>
+
+          <div class="column has-text-centered">
+            <div class="publication-links">
+              <!-- Arxiv PDF link -->
+              <span class="link-block">
+                <a href="https://arxiv.org/pdf/2409.13065.pdf" target="_blank"
+                  class="external-link button is-normal is-rounded is-dark">
+                  <span class="icon">
+                    <i class="fas fa-file-pdf"></i>
+                  </span>
+                  <span>Paper</span>
+                </a>
+              </span>
+
+              <!-- Github link -->
+              <span class="link-block">
+                <a href="https://gitlab.com/mit-mers/info-mapf-public.git" target="_blank"
+                  class="external-link button is-normal is-rounded is-dark">
+                  <span class="icon">
+                    <i class="fab fa-github"></i>
+                  </span>
+                  <span>Code</span>
+                </a>
+              </span>
+
+              <!-- ArXiv abstract Link -->
+              <span class="link-block">
+                <a href="https://arxiv.org/abs/2409.13065" target="_blank"
+                  class="external-link button is-normal is-rounded is-dark">
+                  <span class="icon">
+                    <i class="ai ai-arxiv"></i>
+                  </span>
+                  <span>arXiv</span>
+                </a>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Teaser video-->
+<section class="hero teaser">
+  <div class="container is-max-desktop">
+    <div class="hero-body">
+      <video poster="" id="tree" autoplay controls muted loop height="100%">
+        <!-- Your video here -->
+        <source src="static/videos/IROS_Video.mp4"
+        type="video/mp4">
+      </video>
+      <h2 class="subtitle has-text-centered">
+        We introduce <b>Multi-Agent Vulcan</b>, a novel approach to information-guided Multi-Agent Path Finding (MAPF). We model the problem as a receding horizon MA-POMDP in a limited communication setting, decoupling multi-agent search into single-agent problems. By using an admissible heuristic in the reward space and leveraging A*, we find optimal collision-free paths for all the agents while maximizing the number of phenomenons discovered in a limited mission horizon.
+      </h2>
+    </div>
+  </div>
+</section>
+<!-- End teaser video -->
+
+<!-- Paper abstract -->
+<section class="section hero is-light">
+  <div class="container is-max-desktop">
+    <div class="columns is-centered has-text-centered">
+      <div class="column is-four-fifths">
+        <h2 class="title is-3">Abstract</h2>
+        <div class="content has-text-justified">
+          <p>
+            Scientists often search for phenomenon of interest while exploring new environments. Autonomous vehicles are deployed to explore such areas where human-operated vehicles would be costly or dangerous. Online control of autonomous vehicles for information-gathering is called adaptive sampling and can be framed as a Partially Observable Markov Decision Process (POMDPs) that uses information gain as its principal objective. While prior work focuses largely on single-agent scenarios, this paper confronts challenges unique to multi-agent adaptive sampling, such as avoiding redundant observations, preventing vehicle collision, and facilitating path planning under limited communication. We start with Multi-Agent Path Finding (MAPF) methods, which address collision avoidance by decomposing the multi-agent path planning problem into a series of single-agent path planning problems. We present an extension to these methods called information-driven MAPF which addresses multi-agent information gain under limited communication. First, we introduce an admissible heuristic that relaxes mutual information gain to an additive function that can be evaluated as a set of independent single agent path planning problems. Second, we extend our approach to a distributed system that is robust to limited communication. When all agents are in range, the group plans jointly to maximize information. When some agents move out of range, communicating subgroups are formed and the subgroups plan independently. Since redundant observations are less likely when vehicles are far apart, this approach only incurs a small loss in information gain, resulting in an approach that gracefully transitions from full to partial communication. We evaluate our method against other adaptive sampling strategies across various scenarios, including real-world robotic applications. Our method was able to locate up to 200% more unique phenomena in certain scenarios, and each agent located its first unique phenomenon faster by up to 50%.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+<!-- End paper abstract -->
+
+<!-- Image carousel -->
+<section class="hero is-small">
+  <div class="hero-body">
+    <div class="container">
+      <div id="results-carousel" class="carousel results-carousel">
+        <div class="item" style="display: flex; flex-direction: column; align-items: center;">
+          <h1 class="title" style="margin-bottom: 20px;">
+            MAPF Benchmarks
+          </h1>
+          <div style="display: flex; justify-content: space-around; width: 100%;">
+            <img src="static/images/first_gp_steps_mapf.svg" alt="First Steps to Phenomenon - MAPF" style="width: 45%;" />
+            <img src="static/images/phenomenons_discovered_mapf.svg" alt="Phenomenons Discovered - MAPF" style="width: 45%;" />
+          </div>
+          <h2 class="subtitle has-text-centered" style="margin-top: 20px;">
+            Total number of unique phenomena discovered by all agents on the MAPF maps, along with the average number of steps taken by each agent to locate its first unique phenomenon. On average, our algorithm not only discovers more phenomena across all maps but also enables each agent to find new phenomena faster.
+          </h2>
+        </div>
+        <div class="item" style="display: flex; flex-direction: column; align-items: center;">
+          <h1 class="title" style="margin-bottom: 20px;">
+            Real-Life Bathymetry Benchmarks
+          </h1>
+          <div style="display: flex; justify-content: space-around; width: 100%; padding-top: 50px;">
+            <img src="static/images/first_gp_steps_realistic.svg" alt="First Steps to Phenomenon - MAPF" style="width: 45%;" />
+            <img src="static/images/phenomenons_discovered_realistic.svg" alt="Phenomenons Discovered - MAPF" style="width: 45%;" />
+          </div>
+          <h2 class="subtitle has-text-centered" style="margin-top: 20px;">
+            Average number of steps until each agent locates its first unique phenomenon, along with the total number of unique phenomena discovered by all agents on real bathymetry datasets. On average, our algorithm enables agents to find unique phenomena faster and locate more phenomena across all maps.
+          </h2>
+        </div>
+        <div class="item" style="display: flex; flex-direction: column; align-items: center; text-align: center; justify-content: center;">
+          <h1 class="title has-text-centered">
+            Scalability Benchmark
+          </h1>
+          <div style="display: flex; justify-content: space-around; align-items: center; width: 100%; padding-top: 50px;">
+            <img src="static/images/larger_galveston_bay.svg" alt="MY ALT TEXT"/>
+          </div>
+          <h2 class="subtitle has-text-centered">
+            Scalability experiment conducted over 50 test runs on Galveston Bay, with an increased number of agents and phenomena indicates consistent superior performance of our approach regardless of the scale of the problem at hand.
+          </h2>
+        </div>
+        <div class="item" style="display: flex; flex-direction: column; align-items: center; text-align: center; justify-content: center;">    
+          <div style="display: flex; justify-content: space-around; align-items: center; width: 100%;">
+            <img src="static/images/nodes_analysis.svg" alt="MY ALT TEXT"/>
+          </div>
+          <h2 class="subtitle has-text-centered">
+            Ratio of number of A* search states generated and expanded compared to the maximum possible search states illustrating that our approach generates and expands only a fraction of the maximum possible search states, particularly noticeable in larger maps including real-world bathymetry datasets where this ratio approaches zero.
+          </h2>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+<!-- End image carousel -->
+
+<!-- Paper poster -->
+<!-- <section class="hero is-small is-light"></section>
+  <div class="hero-body">
+    <div class="container">
+      <h2 class="title">Poster</h2>
+
+      <iframe  src="static/pdfs/sample.pdf" width="100%" height="550">
+          </iframe>
+        
+      </div>
+    </div>
+  </section> -->
+<!--End paper poster -->
+
+<!--BibTex citation -->
+  <section class="section" id="BibTeX">
+    <div class="container is-max-desktop content">
+      <h2 class="title">BibTeX</h2>
+      <pre><code>@misc{olkin2024multiagentvulcaninformationdrivenmultiagent,
+      title={Multi-Agent Vulcan: An Information-Driven Multi-Agent Path Finding Approach}, 
+      author={Jake Olkin and Viraj Parimi and Brian Williams},
+      year={2024},
+      eprint={2409.13065},
+      archivePrefix={arXiv},
+      primaryClass={cs.MA},
+      url={https://arxiv.org/abs/2409.13065}, 
+      }</code></pre>
+    </div>
+</section>
+<!--End BibTex citation -->
+
+
+<footer class="footer">
+  <div class="container">
+    <div class="columns is-centered">
+      <div class="column is-8">
+        <div class="content">
+
+          <p>
+            This page was built using the <a href="https://github.com/eliahuhorwitz/Academic-project-page-template" target="_blank">Academic Project Page Template</a> which was adopted from the <a href="https://nerfies.github.io" target="_blank">Nerfies</a> project page.
+            You are free to borrow the source code of this website, we just ask that you link back to this page in the footer. <br> This website is licensed under a <a rel="license"  href="http://creativecommons.org/licenses/by-sa/4.0/" target="_blank">Creative
+            Commons Attribution-ShareAlike 4.0 International License</a>.
+          </p>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<!-- Statcounter tracking code -->
+  <!-- You can add a tracker to track page visits by creating an account at statcounter.com -->
+<!-- End of Statcounter Code -->
+</body>
+</html>
