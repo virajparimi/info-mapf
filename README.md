@@ -1,8 +1,8 @@
 # Information Driven Multi-Agent Path Finding
 
-Jake Olkin\*, [Viraj Parimi](https://people.csail.mit.edu/vparimi/)\*, [Brian Williams](https://www.csail.mit.edu/person/brian-williams)  
-Massachusetts Institute of Technology
-\*Equal contribution
+Jake Olkin\*, [Viraj Parimi](https://people.csail.mit.edu/vparimi/)\*, [Brian Williams](https://www.csail.mit.edu/person/brian-williams)
+Massachusetts Institute of Technology  
+\*Equal contribution  
 **[IROS 2024](https://iros2024-abudhabi.org/)**
 
 **Project:** [info-mapf-mers.csail.mit.edu](https://info-mapf-mers.csail.mit.edu/) • **Paper:** [arXiv:2409.13065](https://arxiv.org/abs/2409.13065)
