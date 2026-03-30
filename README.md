@@ -57,3 +57,20 @@ python test_real_world_setup.py --dataset_name <name_of_dataset> --cell_size_deg
 ```
 
 Note: Information about the program options can be found in the corresponding files.
+
+
+## Citation
+If you use our work or codebase in your research, please cite our paper.
+```bibtex
+@INPROCEEDINGS{10801571,
+  author={Olkin, Jake and Parimi, Viraj and Williams, Brian},
+  booktitle={2024 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS)}, 
+  title={Multi-Agent Vulcan: An Information-Driven Multi-Agent Path Finding Approach}, 
+  year={2024},
+  volume={},
+  number={},
+  pages={10253-10259},
+  keywords={Additives;Markov decision processes;Path planning;Collision avoidance;Autonomous vehicles;Mutual information;Intelligent robots},
+  doi={10.1109/IROS58592.2024.10801571}
+}      
+```
